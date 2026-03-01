@@ -270,9 +270,6 @@ struct AgeField: View {
     var body: some View {
         TextField("Не указан", text: $text)
             .textFieldStyle(.plain)
-            #if os(iOS)
-            .keyboardType(.numberPad)
-            #endif
             .onAppear { text = age.map { String($0) } ?? "" }
             .onChange(of: text) { _, new in age = Int(new) }
     }

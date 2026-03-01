@@ -10,10 +10,11 @@ struct BookWorkspace: View {
     @State private var selectedChapter: Chapter? = nil
 
     enum BookModule: String, CaseIterable, Identifiable {
-        case manuscript  = "Рукопись"
-        case characters  = "Персонажи"
+        case manuscript    = "Рукопись"
+        case characters    = "Персонажи"
         case worldBuilding = "Мироустройство"
-        case timeline    = "Таймлайн"
+        case timeline      = "Таймлайн"
+        case search        = "Поиск"
 
         var id: String { rawValue }
         var icon: String {
@@ -22,20 +23,22 @@ struct BookWorkspace: View {
             case .characters:    return "person.2"
             case .worldBuilding: return "globe.europe.africa"
             case .timeline:      return "calendar.day.timeline.left"
+            case .search:        return "magnifyingglass"
             }
         }
     }
 
     var body: some View {
         NavigationSplitView {
+            
             List(BookModule.allCases, selection: $selectedModule) { module in
                 NavigationLink(value: module) {
                     Label(module.rawValue, systemImage: module.icon)
                 }
             }
             .navigationTitle(project.title)
-
-        } content: {
+        }
+        content: {
             Group {
                 switch selectedModule {
                 case .none:
@@ -44,6 +47,19 @@ struct BookWorkspace: View {
                     CharacterListView(project: project, selectedCharacter: $selectedCharacter)
                 case .manuscript:
                     ChapterListView(project: project, selectedChapter: $selectedChapter)
+                case .search:
+                    SearchView(
+                        project: project,
+                        onChapterSelect: { chapter in
+                            selectedChapter = chapter
+                            selectedModule = .manuscript
+                        },
+                        onCharacterSelect: { character in
+                            selectedCharacter = character
+                            selectedModule = .characters
+                        }
+                    )
+                    
                 default:
                     ContentUnavailableView("В разработке", systemImage: "hammer")
                 }
@@ -62,8 +78,18 @@ struct BookWorkspace: View {
                 TextEditorView()
             }
         }
-        .onChange(of: selectedModule) { _, _ in
-            selectedCharacter = nil
+        .toolbar {
+               ToolbarItem(placement: .automatic) {
+                   WorkspaceSearchBar(project: project) { result in
+                       if let chapter   = result.chapter   { selectedChapter = chapter;    selectedModule = .manuscript }
+                       if let character = result.character { selectedCharacter = character; selectedModule = .characters }
+                   }
+                   .frame(width: 400)
+               }
+           }
+        .onChange(of: selectedModule) { _, newModule in
+            if newModule != .characters { selectedCharacter = nil }
+            if newModule != .manuscript { /* сохраняем selectedChapter для навигации из поиска */ }
         }
     }
 }
@@ -92,16 +118,8 @@ struct TextEditorView: View {
     }
 }
 
-// MARK: - Cross-platform image helper
-
-#if os(macOS)
 typealias PlatformImage = NSImage
 extension Image {
     init(platformImage: NSImage) { self.init(nsImage: platformImage) }
 }
-#else
-typealias PlatformImage = UIImage
-extension Image {
-    init(platformImage: UIImage) { self.init(uiImage: platformImage) }
-}
-#endif
+

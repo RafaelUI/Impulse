@@ -4,6 +4,7 @@ import SwiftData
 // MARK: - Chapter Appearances Section
 
 struct ChapterAppearancesSection: View {
+       @State private var searchText: String = ""
     @Bindable var character: Character
     var onChapterTap: (Chapter) -> Void = { _ in }
     @State private var showChapterPicker = false
@@ -398,7 +399,7 @@ struct PanelCharactersView: View {
                         // Круглое фото
                         ZStack {
                             Circle()
-                                .fill(Color("AccentColor").opacity(0.15))
+                                .fill(Color("Blue").opacity(0.15))
                                 .frame(width: 34, height: 34)
                             if let data = character.photoData, let img = PlatformImage(data: data) {
                                 Image(platformImage: img)
@@ -661,3 +662,4 @@ struct PanelBriefView: View {
         }
     }
 }
+
