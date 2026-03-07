@@ -17,6 +17,10 @@ struct TimelineWorkspaceView: View {
         project.timelineTracks.sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var sortedChapters: [Chapter] {
+        project.chapters.sorted { $0.orderIndex < $1.orderIndex }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             // ── Левая колонка: список треков ──────────────────────
@@ -28,24 +32,41 @@ struct TimelineWorkspaceView: View {
                 .fill(Color("Border"))
                 .frame(width: 0.5)
 
-            // ── Правая часть: общий редактор ──────────────────────
-            if let track = selectedTrack {
-                TrackEditorView(track: track)
-                    .frame(maxWidth: .infinity)
-                    .background(Color("Editor"))
-            } else {
-                ZStack {
-                    Color("Editor").ignoresSafeArea()
-                    VStack(spacing: 8) {
-                        Image(systemName: "calendar.day.timeline.left")
-                            .font(.system(size: 36))
-                            .foregroundStyle(Color("SecondaryText").opacity(0.4))
-                        Text("Выберите трек")
-                            .font(.body)
-                            .foregroundStyle(Color("SecondaryText"))
+            // ── Правая часть: редактор ─────────────────────────────
+            VStack(spacing: 0) {
+                // ── Полоса глав ────────────────────────────────────
+                ChapterStrip(chapters: sortedChapters)
+
+                Rectangle()
+                    .fill(Color("Border"))
+                    .frame(height: 0.5)
+
+                // ── Общий редактор всех треков ─────────────────────
+                if sorted.isEmpty {
+                    ZStack {
+                        Color("Editor")
+                        VStack(spacing: 8) {
+                            Image(systemName: "calendar.day.timeline.left")
+                                .font(.system(size: 36))
+                                .foregroundStyle(Color("SecondaryText").opacity(0.4))
+                            Text("Добавьте трек слева")
+                                .font(.body)
+                                .foregroundStyle(Color("SecondaryText"))
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(sorted, id: \.id) { track in
+                                TrackSection(track: track, modelContext: modelContext)
+                            }
+                        }
+                        .padding(.bottom, 40)
+                    }
+                    .background(Color("Editor"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -54,45 +75,56 @@ struct TimelineWorkspaceView: View {
 
     @ViewBuilder
     private var trackList: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(sorted, id: \.id) { track in
-                    TrackRow(
-                        track: track,
-                        isSelected: selectedTrack?.persistentModelID == track.persistentModelID,
-                        onSelect: { selectedTrack = track },
-                        onRename: {
-                            renamingTrack = track
-                            renamingTitle = track.title
-                        },
-                        onDelete: {
-                            if selectedTrack?.id == track.id { selectedTrack = nil }
-                            modelContext.delete(track)
-                            try? modelContext.save()
-                        }
-                    )
+        VStack(alignment: .leading, spacing: 0) {
+            // ── Заголовок ─────────────────────────────────────────
+            Text("Треки")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color("PrimaryText").opacity(0.4))
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            // ── Список ────────────────────────────────────────────
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(sorted, id: \.id) { track in
+                        TrackRow(
+                            track: track,
+                            onRename: {
+                                renamingTrack = track
+                                renamingTitle = track.title
+                            },
+                            onDelete: {
+                                modelContext.delete(track)
+                                try? modelContext.save()
+                            }
+                        )
+                    }
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 12)
-        }
-        .background(Color("PrimaryAccent"))
-        .overlay {
-            if project.timelineTracks.isEmpty {
-                ZStack {
-                    Color("PrimaryAccent").ignoresSafeArea()
-                    VStack(spacing: 8) {
-                        Image(systemName: "calendar.day.timeline.left")
-                            .font(.system(size: 36))
-                            .foregroundStyle(Color("SecondaryText").opacity(0.4))
-                        Text("Треков пока нет")
-                            .foregroundStyle(Color("SecondaryText"))
-                        Text("Нажмите «+» чтобы добавить")
-                            .font(.caption)
-                            .foregroundStyle(Color("SecondaryText").opacity(0.6))
+            .overlay {
+                if project.timelineTracks.isEmpty {
+                    ZStack {
+                        Color("PrimaryAccent")
+                        VStack(spacing: 8) {
+                            Image(systemName: "calendar.day.timeline.left")
+                                .font(.system(size: 32))
+                                .foregroundStyle(Color("SecondaryText").opacity(0.3))
+                            Text("Треков пока нет")
+                                .font(.callout)
+                                .foregroundStyle(Color("SecondaryText"))
+                            Text("Нажмите «+» чтобы добавить")
+                                .font(.caption)
+                                .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                        }
                     }
                 }
             }
         }
+        .background(Color("PrimaryAccent"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { isAdding = true } label: {
@@ -110,6 +142,11 @@ struct TimelineWorkspaceView: View {
                             .padding(.vertical, 7)
                             .frame(width: 220)
                             .glassEffect(in: .rect(cornerRadius: 8))
+                            .onSubmit {
+                                if !newTrackName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    addTrack(); isAdding = false
+                                }
+                            }
                         HStack {
                             Button("Отмена") { newTrackName = ""; isAdding = false }
                                 .buttonStyle(.plain)
@@ -164,8 +201,96 @@ struct TimelineWorkspaceView: View {
         project.timelineTracks.append(track)
         modelContext.insert(track)
         try? modelContext.save()
-        selectedTrack = track
         newTrackName = ""
+    }
+}
+
+// MARK: - Track Section (секция в общем редакторе)
+
+private struct TrackSection: View {
+    @Bindable var track: TimelineTrack
+    let modelContext: ModelContext
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // ── Заголовок секции ───────────────────────────────────
+            Text(track.title.isEmpty ? "Без названия" : track.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color("SecondaryText").opacity(0.5))
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .padding(.horizontal, 36)
+                .padding(.top, 32)
+                .padding(.bottom, 8)
+
+            Rectangle()
+                .fill(Color("Border"))
+                .frame(height: 0.5)
+                .padding(.horizontal, 36)
+
+            // ── Редактор ───────────────────────────────────────────
+            ZStack(alignment: .topLeading) {
+                if track.content.isEmpty {
+                    Text("Заметки к треку «\(track.title)»...")
+                        .foregroundStyle(Color("SecondaryText").opacity(0.4))
+                        .font(.system(size: 17, design: .serif))
+                        .padding(.top, 14)
+                        .padding(.leading, 36)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $track.content)
+                    .font(.system(size: 17, design: .serif))
+                    .padding(.horizontal, 30)
+                    .padding(.top, 8)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 120)
+            }
+        }
+        .onChange(of: track.content) { _, _ in
+            try? modelContext.save()
+        }
+    }
+}
+
+// MARK: - Chapter Strip
+
+private struct ChapterStrip: View {
+    var chapters: [Chapter]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                if chapters.isEmpty {
+                    Text("Глав пока нет")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color("SecondaryText").opacity(0.4))
+                        .padding(.horizontal, 4)
+                } else {
+                    ForEach(chapters, id: \.id) { chapter in
+                        ChapterChip(title: chapter.title.isEmpty ? "Без названия" : chapter.title)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+        }
+        .frame(height: 44)
+        .background(Color("PrimaryAccent"))
+    }
+}
+
+// MARK: - Chapter Chip
+
+private struct ChapterChip: View {
+    var title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Color("PrimaryText").opacity(0.8))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color("PrimaryText").opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -173,67 +298,28 @@ struct TimelineWorkspaceView: View {
 
 private struct TrackRow: View {
     let track: TimelineTrack
-    let isSelected: Bool
-    let onSelect: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 10) {
-                Image(systemName: "calendar.day.timeline.left")
-                    .foregroundStyle(isSelected ? Color("AccentColor") : Color("SecondaryText").opacity(0.6))
-                    .frame(width: 16)
-                Text(track.title.isEmpty ? "Без названия" : track.title)
-                    .font(.body)
-                    .foregroundStyle(isSelected ? Color("AccentColor") : Color("PrimaryText"))
-                    .lineLimit(1)
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color("AccentColor").opacity(0.12) : Color.clear)
-            )
-            .padding(.horizontal, 10)
-            .contentShape(Rectangle())
+        HStack(spacing: 10) {
+            Image(systemName: "calendar.day.timeline.left")
+                .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                .frame(width: 16)
+            Text(track.title.isEmpty ? "Без названия" : track.title)
+                .font(.body)
+                .foregroundStyle(Color("PrimaryText"))
+                .lineLimit(1)
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
         .contextMenu {
             Button("Переименовать", action: onRename)
             Divider()
             Button("Удалить", role: .destructive, action: onDelete)
-        }
-    }
-}
-
-// MARK: - Track Editor
-
-private struct TrackEditorView: View {
-    @Bindable var track: TimelineTrack
-    @Environment(\.modelContext) private var modelContext
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            if track.content.isEmpty {
-                Text("Начните писать заметки к треку...")
-                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
-                    .font(.system(size: 17, design: .serif))
-                    .padding(.top, 48)
-                    .padding(.leading, 36)
-                    .allowsHitTesting(false)
-            }
-            TextEditor(text: $track.content)
-                .font(.system(size: 17, design: .serif))
-                .padding(.horizontal, 30)
-                .padding(.top, 40)
-                .scrollContentBackground(.hidden)
-        }
-        .background(Color("Editor"))
-        .onChange(of: track.content) { _, _ in
-            try? modelContext.save()
         }
     }
 }
