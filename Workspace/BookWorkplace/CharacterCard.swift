@@ -37,12 +37,35 @@ struct CharacterListView: View {
                     Image(systemName: "plus")
                         .foregroundStyle(Color("PrimaryText"))
                 }
+                .popover(isPresented: $isAddingCharacter) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Новый персонаж")
+                            .font(.headline)
+                            .foregroundStyle(Color("PrimaryText"))
+                        TextField("Имя персонажа", text: $newCharacterName)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(width: 220)
+                            .glassEffect(in: .rect(cornerRadius: 8))
+                            .onSubmit {
+                                if !newCharacterName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    addCharacter(); isAddingCharacter = false
+                                }
+                            }
+                        HStack {
+                            Button("Отмена") { newCharacterName = ""; isAddingCharacter = false }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color("SecondaryText"))
+                            Spacer()
+                            Button("Создать") { addCharacter(); isAddingCharacter = false }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(newCharacterName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                    .padding(18)
+                }
             }
-        }
-        .alert("Новый персонаж", isPresented: $isAddingCharacter) {
-            TextField("Имя персонажа", text: $newCharacterName)
-            Button("Создать") { addCharacter() }
-            Button("Отмена", role: .cancel) { newCharacterName = "" }
         }
         .overlay {
             if project.characters.isEmpty {

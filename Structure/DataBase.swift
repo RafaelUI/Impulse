@@ -22,6 +22,8 @@ final class WritingProject {
     @Relationship(deleteRule: .cascade) var characters: [Character] = []
     @Relationship(deleteRule: .cascade) var chapters: [Chapter] = []
     @Relationship(deleteRule: .cascade) var worldBuilding: WorldBuilding? = nil
+    @Relationship(deleteRule: .cascade) var timelineTracks: [TimelineTrack] = []
+    var timelineContent: String = ""
 
     init(title: String, type: ProjectType = .book) {
         self.title = title
@@ -273,6 +275,23 @@ enum TimelineEventType: String, Codable, CaseIterable {
         case .turning: return "arrow.triangle.turn.up.right.circle.fill"
         case .appearance: return "person.fill.badge.plus"
         }
+    }
+}
+
+// MARK: - Трек таймлайна
+
+@Model
+final class TimelineTrack {
+    var id: UUID = UUID()
+    var title: String = ""
+    var content: String = ""
+    var orderIndex: Int = 0
+
+    var project: WritingProject?
+
+    init(title: String, orderIndex: Int = 0) {
+        self.title = title
+        self.orderIndex = orderIndex
     }
 }
 

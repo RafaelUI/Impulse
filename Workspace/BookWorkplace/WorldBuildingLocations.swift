@@ -65,13 +65,35 @@ struct WorldBuildingLocationListView: View {
                     Image(systemName: "plus")
                         .foregroundStyle(Color("PrimaryText"))
                 }
-                .buttonStyle(AccentToolbarButtonStyle())
+                .popover(isPresented: $isAdding) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Новая локация")
+                            .font(.headline)
+                            .foregroundStyle(Color("PrimaryText"))
+                        TextField("Название локации", text: $newName)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(width: 220)
+                            .glassEffect(in: .rect(cornerRadius: 8))
+                            .onSubmit {
+                                if !newName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    addLocation(); isAdding = false
+                                }
+                            }
+                        HStack {
+                            Button("Отмена") { newName = ""; isAdding = false }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color("SecondaryText"))
+                            Spacer()
+                            Button("Создать") { addLocation(); isAdding = false }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                    .padding(18)
+                }
             }
-        }
-        .alert("Новая локация", isPresented: $isAdding) {
-            TextField("Название", text: $newName)
-            Button("Создать") { addLocation() }
-            Button("Отмена", role: .cancel) { newName = "" }
         }
         .overlay {
             if locations.isEmpty {

@@ -10,6 +10,7 @@ struct BookWorkspace: View {
     @State private var selectedChapter: Chapter? = nil
     @State private var selectedLocation: WorldLocation? = nil
     @State private var locationTabs: [UUID: WorldLocationTab] = [:]
+    @State private var selectedTrack: TimelineTrack? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -44,23 +45,28 @@ struct BookWorkspace: View {
             .background(Color("PrimaryAccent"))
             .navigationTitle(project.title)
         } detail: {
-            HStack(spacing: 0) {
-                // ── Средняя колонка (список) ─────────────────────────
-                listColumn
-                    .frame(width: 220)
-                    .background(Color("PrimaryAccent"))
+            if selectedModule == .timeline {
+                TimelineWorkspaceView(project: project, selectedTrack: $selectedTrack)
+                    .navigationTitle("")
+            } else {
+                HStack(spacing: 0) {
+                    // ── Средняя колонка (список) ─────────────────────────
+                    listColumn
+                        .frame(width: 220)
+                        .background(Color("PrimaryAccent"))
 
-                // ── Разделитель ──────────────────────────────────────
-                Rectangle()
-                    .fill(Color("Border"))
-                    .frame(width: 0.5)
+                    // ── Разделитель ──────────────────────────────────────
+                    Rectangle()
+                        .fill(Color("Border"))
+                        .frame(width: 0.5)
 
-                // ── Detail (редактор / карточка) ─────────────────────
-                detailColumn
-                    .frame(maxWidth: .infinity)
-                    .background(Color("PrimaryAccent"))
+                    // ── Detail (редактор / карточка) ─────────────────────
+                    detailColumn
+                        .frame(maxWidth: .infinity)
+                        .background(Color("PrimaryAccent"))
+                }
+                .navigationTitle("")
             }
-            .navigationTitle("")
         }
         .navigationBarBackButtonHidden(true)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)

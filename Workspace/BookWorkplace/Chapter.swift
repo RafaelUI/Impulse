@@ -227,24 +227,65 @@ struct ChapterListView: View {
                         Image(systemName: "plus")
                             .foregroundStyle(Color("PrimaryText"))
                     }
+                    .popover(isPresented: $isAdding) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Новая глава")
+                                .font(.headline)
+                                .foregroundStyle(Color("PrimaryText"))
+                            TextField("Название главы", text: $newTitle)
+                                .textFieldStyle(.plain)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .frame(width: 220)
+                                .glassEffect(in: .rect(cornerRadius: 8))
+                                .onSubmit {
+                                    if !newTitle.trimmingCharacters(in: .whitespaces).isEmpty {
+                                        addChapter(); isAdding = false
+                                    }
+                                }
+                            HStack {
+                                Button("Отмена") { newTitle = ""; isAdding = false }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(Color("SecondaryText"))
+                                Spacer()
+                                Button("Создать") { addChapter(); isAdding = false }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                        }
+                        .padding(18)
+                    }
                 }
             }
-            .alert("Новая глава", isPresented: $isAdding) {
-                TextField("Название главы", text: $newTitle)
-                Button("Создать") { addChapter() }
-                Button("Отмена", role: .cancel) { newTitle = "" }
-            }
-            .alert("Переименовать", isPresented: Binding(
+            .popover(isPresented: Binding(
                 get: { editingChapter != nil },
                 set: { if !$0 { editingChapter = nil } }
             )) {
-                TextField("Название", text: $editingTitle)
-                Button("Сохранить") {
-                    editingChapter?.title = editingTitle
-                    try? modelContext.save()
-                    editingChapter = nil
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Переименовать главу")
+                        .font(.headline)
+                        .foregroundStyle(Color("PrimaryText"))
+                    TextField("Название", text: $editingTitle)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(width: 220)
+                        .glassEffect(in: .rect(cornerRadius: 8))
+                    HStack {
+                        Button("Отмена") { editingChapter = nil }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color("SecondaryText"))
+                        Spacer()
+                        Button("Сохранить") {
+                            editingChapter?.title = editingTitle
+                            try? modelContext.save()
+                            editingChapter = nil
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(editingTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
                 }
-                Button("Отмена", role: .cancel) { editingChapter = nil }
+                .padding(18)
             }
     }
 

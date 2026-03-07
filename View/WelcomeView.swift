@@ -14,20 +14,20 @@ struct WelcomeView: View {
                 Color("PrimaryAccent")
                     .ignoresSafeArea()
 
-                VStack(spacing: 40) {
+                VStack(spacing: 60) {
                     Spacer()
 
                     Text("Impulse")
-                        .font(.system(size: 60, weight: .thin, design: .serif))
+                        .font(.system(size: 240, weight: .thin, design: .serif))
                         .foregroundStyle(Color("AccentColor"))
 
-                    VStack(spacing: 15) {
+                    VStack(spacing: 30) {
                         // Кнопка создания
                         Button(action: { isShowingCreateSheet = true }) {
                             Label("Создать проект", systemImage: "plus.circle.fill")
-                                .frame(width: 220)
+                                .frame(width: 260)
                                 .padding()
-                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 1))
+                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 5))
                                 .foregroundStyle(Color("AccentColor"))
                         }
                         .buttonStyle(.plain)
@@ -45,9 +45,9 @@ struct WelcomeView: View {
                             }
                         } label: {
                             Label("Мои проекты", systemImage: "chevron.down")
-                                .frame(width: 220)
+                                .frame(width: 260)
                                 .padding()
-                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 1))
+                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 5))
                                 .foregroundStyle(Color("AccentColor"))
                         }
                     }

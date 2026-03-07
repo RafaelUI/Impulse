@@ -19,6 +19,7 @@ struct ImpulseApp: App {
             WorldConcept.self,
             WorldStructure.self,
             TimelineEvent.self,
+            TimelineTrack.self,
         ])
         
         // Настройка конфигурации (здесь в будущем можно включить iCloud)
