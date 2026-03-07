@@ -20,7 +20,7 @@ struct SearchView: View {
             // ── Поисковая строка ───────────────────────────────────
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("SecondaryText"))
 
                 TextField("Поиск по проекту...", text: $query)
                     .textFieldStyle(.plain)
@@ -35,7 +35,7 @@ struct SearchView: View {
                         hasSearched = false
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color("SecondaryText"))
                     }
                     .buttonStyle(.plain)
                 }
@@ -55,7 +55,7 @@ struct SearchView: View {
                     } label: {
                         Text(m.rawValue)
                             .font(.system(size: 11, weight: mode == m ? .semibold : .regular))
-                            .foregroundStyle(mode == m ? Color("AccentColor") : .secondary)
+                            .foregroundStyle(mode == m ? Color("AccentColor") : Color("SecondaryText"))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .background(
@@ -73,7 +73,7 @@ struct SearchView: View {
                 if hasSearched && !results.isEmpty {
                     Text("\(results.count) результатов")
                         .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
                 }
             }
             .padding(.horizontal, 16)
@@ -87,7 +87,7 @@ struct SearchView: View {
                     ProgressView()
                     Text("Загрузка модели поиска...")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -178,14 +178,14 @@ struct SearchGroupSection: View {
                     Text(group.type.rawValue.uppercased())
                         .font(.system(size: 10, weight: .semibold))
                         .tracking(0.8)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                     Text("·  \(group.results.count)")
                         .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
@@ -231,18 +231,18 @@ struct SearchResultRow: View {
                     HStack {
                         Text(result.title)
                             .font(.body.weight(.medium))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color("PrimaryText"))
                             .lineLimit(1)
                         Spacer()
                         Text("\(Int(result.score * 100))%")
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color("SecondaryText").opacity(0.6))
                     }
 
                     if !result.snippet.isEmpty {
                         Text(result.snippet)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color("SecondaryText"))
                             .lineLimit(2)
                     }
                 }
@@ -298,7 +298,7 @@ struct SearchHintView: View {
                 ForEach(hints, id: \.text) { hint in
                     Label(hint.text, systemImage: hint.icon)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                 }
             }
         }
@@ -306,3 +306,4 @@ struct SearchHintView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+

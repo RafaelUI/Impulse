@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 
+
+
+
 // MARK: - Chapter Appearances Section
 
 struct ChapterAppearancesSection: View {
@@ -25,7 +28,7 @@ struct ChapterAppearancesSection: View {
                 if character.appearsInChapters.isEmpty {
                     Text("Ни одной главы не добавлено")
                         .font(.subheadline)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
                         .padding(.vertical, 4)
                 } else {
                     ForEach(
@@ -78,7 +81,7 @@ struct ChapterLinkRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(chapter.title.isEmpty ? "Без названия" : chapter.title)
                         .font(.subheadline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color("PrimaryText"))
                     HStack(spacing: 4) {
                         Image(systemName: chapter.status.icon)
                             .font(.caption2)
@@ -94,7 +97,7 @@ struct ChapterLinkRow: View {
                     onRemove()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                 }
                 .buttonStyle(.plain)
             }
@@ -123,7 +126,7 @@ struct ChapterPickerPopover: View {
             if chapters.isEmpty {
                 Text("Все главы уже добавлены")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("SecondaryText"))
                     .padding(16)
             } else {
                 ScrollView {
@@ -136,7 +139,7 @@ struct ChapterPickerPopover: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(chapter.title.isEmpty ? "Без названия" : chapter.title)
                                             .font(.body)
-                                            .foregroundStyle(.primary)
+                                            .foregroundStyle(Color("PrimaryText"))
                                         Text(chapter.status.rawValue)
                                             .font(.caption)
                                             .foregroundStyle(chapter.status.color)
@@ -160,6 +163,46 @@ struct ChapterPickerPopover: View {
     }
 }
 
+// MARK: - Chapter Row
+
+private struct ChapterRow: View {
+    let chapter: Chapter
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                Image(systemName: chapter.status.icon)
+                    .foregroundStyle(isSelected ? Color("AccentColor") : chapter.status.color)
+                    .frame(width: 16)
+                Text(chapter.title.isEmpty ? "Без названия" : chapter.title)
+                    .font(.body)
+                    .foregroundStyle(isSelected ? Color("AccentColor") : Color("PrimaryText"))
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Color("AccentColor").opacity(0.12) : Color.clear)
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Переименовать", action: onRename)
+            Divider()
+            Button("Удалить", role: .destructive, action: onDelete)
+        }
+    }
+}
+
 // MARK: - Chapter List
 
 struct ChapterListView: View {
@@ -177,59 +220,77 @@ struct ChapterListView: View {
     }
 
     var body: some View {
-        List(sorted, id: \.id, selection: $selectedChapter) { chapter in
-            HStack {
-                Image(systemName: chapter.status.icon)
-                    .foregroundStyle(chapter.status.color)
-                    .frame(width: 16)
-                Text(chapter.title.isEmpty ? "Без названия" : chapter.title)
-                    .font(.body)
-            }
-            .tag(chapter)
-            .contextMenu {
-                Button("Переименовать") {
-                    editingChapter = chapter
-                    editingTitle = chapter.title
+        chapterList
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { isAdding = true } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(Color("PrimaryText"))
+                    }
                 }
-                Divider()
-                Button("Удалить", role: .destructive) {
-                    if selectedChapter?.id == chapter.id { selectedChapter = nil }
-                    modelContext.delete(chapter)
+            }
+            .alert("Новая глава", isPresented: $isAdding) {
+                TextField("Название главы", text: $newTitle)
+                Button("Создать") { addChapter() }
+                Button("Отмена", role: .cancel) { newTitle = "" }
+            }
+            .alert("Переименовать", isPresented: Binding(
+                get: { editingChapter != nil },
+                set: { if !$0 { editingChapter = nil } }
+            )) {
+                TextField("Название", text: $editingTitle)
+                Button("Сохранить") {
+                    editingChapter?.title = editingTitle
                     try? modelContext.save()
+                    editingChapter = nil
+                }
+                Button("Отмена", role: .cancel) { editingChapter = nil }
+            }
+    }
+
+    @ViewBuilder
+    private var chapterList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(sorted, id: \.id) { chapter in
+                    ChapterRow(
+                        chapter: chapter,
+                        isSelected: selectedChapter?.persistentModelID == chapter.persistentModelID,
+                        onSelect: { selectedChapter = chapter },
+                        onRename: {
+                            editingChapter = chapter
+                            editingTitle = chapter.title
+                        },
+                        onDelete: {
+                            if selectedChapter?.id == chapter.id { selectedChapter = nil }
+                            modelContext.delete(chapter)
+                            try? modelContext.save()
+                        }
+                    )
                 }
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { isAdding = true } label: {
-                    Image(systemName: "plus")
-                }
-            }
-        }
-        .alert("Новая глава", isPresented: $isAdding) {
-            TextField("Название главы", text: $newTitle)
-            Button("Создать") { addChapter() }
-            Button("Отмена", role: .cancel) { newTitle = "" }
-        }
-        .alert("Переименовать", isPresented: Binding(
-            get: { editingChapter != nil },
-            set: { if !$0 { editingChapter = nil } }
-        )) {
-            TextField("Название", text: $editingTitle)
-            Button("Сохранить") {
-                editingChapter?.title = editingTitle
-                try? modelContext.save()
-                editingChapter = nil
-            }
-            Button("Отмена", role: .cancel) { editingChapter = nil }
-        }
+        .background(Color("PrimaryAccent"))
         .overlay {
             if project.chapters.isEmpty {
-                ContentUnavailableView(
-                    "Глав пока нет",
-                    systemImage: "doc.text",
-                    description: Text("Нажмите «+» чтобы добавить первую")
-                )
+                emptyChaptersView
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyChaptersView: some View {
+        ZStack {
+            Color("PrimaryAccent").ignoresSafeArea()
+            VStack(spacing: 8) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 36))
+                    .foregroundStyle(Color("SecondaryText").opacity(0.4))
+                Text("Глав пока нет")
+                    .foregroundStyle(Color("SecondaryText"))
+                Text("Нажмите + чтобы добавить первую")
+                    .font(.caption)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
             }
         }
     }
@@ -271,43 +332,37 @@ struct ChapterEditorView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // ── Редактор ──────────────────────────────────────────
-            VStack(spacing: 0) {
-                TextField("Название главы", text: $chapter.title)
-                    .font(.system(.title2, design: .serif, weight: .semibold))
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 30)
-                    .padding(.top, 20)
-                    .padding(.bottom, 12)
-
-                Divider()
-
+        VStack(spacing: 0) {
+            // ── Редактор + боковая панель ─────────────────────────
+            HStack(spacing: 0) {
                 ZStack(alignment: .topLeading) {
                     if chapter.text.isEmpty {
                         Text("Начните писать...")
-                            .foregroundStyle(.tertiary)
-                            .font(.system(.body, design: .serif))
-                            .padding(.top, 20)
+                            .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                            .font(.system(size: 17, design: .serif))
+                            .padding(.top, 16)
                             .padding(.leading, 36)
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $chapter.text)
-                        .font(.system(.body, design: .serif))
+                        .font(.system(size: 17, design: .serif))
                         .padding(.horizontal, 30)
                         .scrollContentBackground(.hidden)
                 }
-            }
+                .background(Color("Editor"))
 
-            // ── Боковая панель ────────────────────────────────────
-            if showPanel {
-                Divider()
-                ChapterSidePanel(chapter: chapter, selectedTab: $selectedPanelTab)
-                    .frame(width: 280)
-                    .transition(.move(edge: .trailing))
+                // ── Боковая панель ────────────────────────────────
+                if showPanel {
+                    Rectangle()
+                        .fill(Color("Border"))
+                        .frame(width: 0.5)
+                    ChapterSidePanel(chapter: chapter, selectedTab: $selectedPanelTab)
+                        .frame(width: 280)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
-        .background(Color("PrimaryAccent"))
+        .background(Color("Editor"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -317,6 +372,7 @@ struct ChapterEditorView: View {
                 } label: {
                     Image(systemName: showPanel ? "sidebar.right" : "sidebar.right")
                         .symbolVariant(showPanel ? .fill : .none)
+                        .foregroundStyle(Color("PrimaryText"))
                 }
             }
         }
@@ -345,9 +401,12 @@ struct ChapterSidePanel: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
 
-            Divider()
+            Rectangle()
+                .fill(Color("Border"))
+                .frame(height: 0.5)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -365,7 +424,7 @@ struct ChapterSidePanel: View {
                 .padding(16)
             }
         }
-        .background()  
+        .background(Color("PrimaryAccent"))
     }
 }
 
@@ -385,21 +444,21 @@ struct PanelCharactersView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Персонажи в главе")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color("SecondaryText"))
                 .textCase(.uppercase)
                 .tracking(0.8)
 
             if chapter.characters.isEmpty {
                 Text("Нет персонажей")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
             } else {
                 ForEach(chapter.characters, id: \.id) { character in
                     HStack(spacing: 10) {
                         // Круглое фото
                         ZStack {
                             Circle()
-                                .fill(Color("Blue").opacity(0.15))
+                                .fill(Color("AccentColor").opacity(0.15))
                                 .frame(width: 34, height: 34)
                             if let data = character.photoData, let img = PlatformImage(data: data) {
                                 Image(platformImage: img)
@@ -420,7 +479,7 @@ struct PanelCharactersView: View {
                             if !character.role.isEmpty {
                                 Text(character.role)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color("SecondaryText"))
                             }
                         }
 
@@ -430,7 +489,7 @@ struct PanelCharactersView: View {
                             chapter.characters.removeAll { $0.id == character.id }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color("SecondaryText"))
                         }
                         .buttonStyle(.plain)
                     }
@@ -482,11 +541,11 @@ struct PanelCharactersView: View {
                                         VStack(alignment: .leading, spacing: 1) {
                                             Text(character.name)
                                                 .font(.body)
-                                                .foregroundStyle(.primary)
+                                                .foregroundStyle(Color("PrimaryText"))
                                             if !character.role.isEmpty {
                                                 Text(character.role)
                                                     .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                    .foregroundStyle(Color("SecondaryText"))
                                             }
                                         }
                                         Spacer()
@@ -518,7 +577,7 @@ struct PanelLocationsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Локации персонажей")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color("SecondaryText"))
                 .textCase(.uppercase)
                 .tracking(0.8)
 
@@ -528,7 +587,7 @@ struct PanelLocationsView: View {
             if withLocations.isEmpty {
                 Text("Локации не заданы")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
             } else {
                 ForEach(withLocations, id: \.id) { character in
                     VStack(alignment: .leading, spacing: 4) {
@@ -536,7 +595,7 @@ struct PanelLocationsView: View {
                             .font(.subheadline.weight(.medium))
                         Text(character.locations)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color("SecondaryText"))
                     }
                     .padding(10)
                     .background(Color("AccentColor").opacity(0.06),
@@ -556,7 +615,7 @@ struct PanelTimelineView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Таймлайн главы")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color("SecondaryText"))
                 .textCase(.uppercase)
                 .tracking(0.8)
 
@@ -565,7 +624,7 @@ struct PanelTimelineView: View {
             if events.isEmpty {
                 Text("Событий нет")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
             } else {
                 ForEach(events, id: \.id) { event in
                     HStack(alignment: .top, spacing: 10) {
@@ -578,7 +637,7 @@ struct PanelTimelineView: View {
                             if !event.date.isEmpty {
                                 Text(event.date)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color("SecondaryText"))
                             }
                         }
                     }
@@ -603,7 +662,7 @@ struct PanelBriefView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Статистика")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("SecondaryText"))
                     .textCase(.uppercase)
                     .tracking(0.8)
 
@@ -613,7 +672,7 @@ struct PanelBriefView: View {
                     Label("\(chapter.text.count) симв.", systemImage: "character.cursor.ibeam")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color("SecondaryText"))
             }
 
             Divider()
@@ -622,7 +681,7 @@ struct PanelBriefView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Статус")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("SecondaryText"))
                     .textCase(.uppercase)
                     .tracking(0.8)
 
@@ -640,14 +699,14 @@ struct PanelBriefView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Заметки")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("SecondaryText"))
                     .textCase(.uppercase)
                     .tracking(0.8)
 
                 ZStack(alignment: .topLeading) {
                     if chapter.notes.isEmpty {
                         Text("Добавьте заметки к главе...")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color("SecondaryText").opacity(0.6))
                             .font(.caption)
                             .padding(.top, 4)
                             .padding(.leading, 4)

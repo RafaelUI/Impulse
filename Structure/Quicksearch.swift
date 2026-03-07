@@ -27,13 +27,13 @@ struct WorkspaceSearchBar: View {
             // ── Строка поиска ──────────────────────────────────────
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(isFocused ? Color("AccentColor") : .secondary)
-                    .font(.system(size: 13))
+                    .foregroundStyle(isFocused ? Color("AccentColor") : Color("SecondaryText"))
+                    .font(.system(size: 14))
                     .animation(.easeInOut(duration: 0.15), value: isFocused)
 
-                TextField("Поиск...", text: $query)
+                TextField("Search documents...", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .focused($isFocused)
                     .onSubmit { confirmFirst() }
                     .onChange(of: query) { _, new in scheduleSearch(new) }
@@ -43,23 +43,16 @@ struct WorkspaceSearchBar: View {
                         clearSearch()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color("SecondaryText").opacity(0.5))
                             .font(.system(size: 13))
                     }
                     .buttonStyle(.plain)
-                } else {
-                    // Подсказка с названием проекта
-                    Text(project.title)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.quaternary)
-                        .lineLimit(1)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Color("AccentColor").opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
+            .background(Color("Editor"), in: Capsule())
+            .overlay(Capsule().stroke(Color("SecondaryText").opacity(isFocused ? 0.25 : 0), lineWidth: 1))
 
             // ── Выпадающие результаты ──────────────────────────────
             .popover(isPresented: $isExpanded, arrowEdge: .bottom) {
@@ -141,12 +134,12 @@ private struct SearchDropdownRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(result.title)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color("PrimaryText"))
                         .lineLimit(1)
                     if !result.snippet.isEmpty {
                         Text(result.snippet)
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color("SecondaryText"))
                             .lineLimit(1)
                     }
                 }
@@ -169,3 +162,4 @@ private struct SearchDropdownRow: View {
         .onHover { isHovered = $0 }
     }
 }
+

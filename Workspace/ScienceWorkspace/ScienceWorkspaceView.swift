@@ -6,6 +6,6 @@ struct ScienceWorkspace: View {
     var body: some View {
         Text("Научный проект — в разработке")
             .font(.title2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color("SecondaryText"))
     }
 }

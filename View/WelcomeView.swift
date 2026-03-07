@@ -27,9 +27,8 @@ struct WelcomeView: View {
                             Label("Создать проект", systemImage: "plus.circle.fill")
                                 .frame(width: 220)
                                 .padding()
-                                .background(Color("AccentColor"))
-                                .foregroundStyle(Color("PrimaryAccent"))
-                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 1))
+                                .foregroundStyle(Color("AccentColor"))
                         }
                         .buttonStyle(.plain)
 
@@ -62,7 +61,7 @@ struct WelcomeView: View {
                             Image(systemName: "g.circle.fill")
                         }
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                         .padding()
                     }
                 }
@@ -76,6 +75,7 @@ struct WelcomeView: View {
         .sheet(isPresented: $isShowingCreateSheet) {
             CreateProjectSheet()
         }
+        .background(WindowStyler().frame(width: 0, height: 0))
     }
 }
 
@@ -91,44 +91,106 @@ struct CreateProjectSheet: View {
     let types = ProjectType.allCases
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Основная информация") {
-                    TextField("Название проекта", text: $projectTitle)
-                        .foregroundStyle(Color("AccentColor"))
-                }
+        ZStack {
+            Color("PrimaryAccent").ignoresSafeArea()
 
-                Section("Тип проекта") {
-                    Picker("Тип", selection: $selectedType) {
-                        ForEach(types, id: \.self) { type in
-                            Label(type.rawValue, systemImage: type.icon)
-                                .tag(type)
+            VStack(alignment: .leading, spacing: 0) {
+
+                // ── Заголовок ──
+                HStack {
+                    Text("Новый проект")
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(Color("PrimaryText"))
+                    Spacer()
+                    Button("Отмена") { dismiss() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color("SecondaryText"))
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
+
+                Divider()
+                    .background(Color("Border"))
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+
+                        // ── Название ──
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("НАЗВАНИЕ")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color("SecondaryText"))
+                                .tracking(0.8)
+
+                            TextField("Название проекта", text: $projectTitle)
+                                .textFieldStyle(.plain)
+                                .font(.body)
+                                .foregroundStyle(Color("PrimaryText"))
+                                .padding(10)
+                                .background(Color("AccentColor").opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        // ── Тип проекта ──
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("ТИП ПРОЕКТА")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color("SecondaryText"))
+                                .tracking(0.8)
+
+                            VStack(spacing: 6) {
+                                ForEach(types, id: \.self) { type in
+                                    Button {
+                                        selectedType = type
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: type.icon)
+                                                .foregroundStyle(selectedType == type ? Color("AccentColor") : Color("SecondaryText"))
+                                                .frame(width: 20)
+                                            Text(type.rawValue)
+                                                .foregroundStyle(selectedType == type ? Color("PrimaryText") : Color("SecondaryText"))
+                                            Spacer()
+                                            if selectedType == type {
+                                                Image(systemName: "checkmark")
+                                                    .foregroundStyle(Color("AccentColor"))
+                                                    .font(.caption.weight(.semibold))
+                                            }
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 9)
+                                        .background(
+                                            selectedType == type
+                                                ? Color("AccentColor").opacity(0.12)
+                                                : Color.clear,
+                                            in: RoundedRectangle(cornerRadius: 8)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                     }
-                    .pickerStyle(.inline)  // ✅ .navigationLink — iOS only, .inline работает везде
+                    .padding(24)
                 }
 
-                Section {
-                    Button(action: createProject) {
-                        Text("Начать работу")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color("AccentColor"))
-                    .disabled(projectTitle.isEmpty)
+                Divider()
+                    .background(Color("Border"))
+
+                // ── Кнопка создать ──
+                Button(action: createProject) {
+                    Text("Начать работу")
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(projectTitle.isEmpty ? Color("AccentColor").opacity(0.3) : Color("AccentColor"), lineWidth: 1))
+                        .foregroundStyle(projectTitle.isEmpty ? Color("AccentColor").opacity(0.4) : Color("AccentColor"))
                 }
-            }
-            .navigationTitle("Новый проект")
-            // ✅ Убрали .navigationBarTitleDisplayMode — iOS only
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
-                }
+                .buttonStyle(.plain)
+                .disabled(projectTitle.isEmpty)
+                .padding(24)
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 400, minHeight: 300)
-        #endif
+        .frame(minWidth: 380, minHeight: 420)
     }
 
     private func createProject() {
@@ -136,7 +198,6 @@ struct CreateProjectSheet: View {
         modelContext.insert(newProject)
         do {
             try modelContext.save()
-            print("✅ Проект создан: \(projectTitle)")
             dismiss()
         } catch {
             print("❌ Ошибка: \(error.localizedDescription)")

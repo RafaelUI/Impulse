@@ -6,6 +6,6 @@ struct NovelWorkspace: View {
     var body: some View {
         Text("Визуальная новелла — в разработке")
             .font(.title2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color("SecondaryText"))
     }
 }

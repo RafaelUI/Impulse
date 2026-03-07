@@ -138,6 +138,8 @@ final class WorldBuilding {
     // Структура мира — страны, фракции, иерархии
     @Relationship(deleteRule: .cascade) var structures: [WorldStructure] = []
 
+    @Relationship(deleteRule: .cascade) var locations: [WorldLocation] = []
+
     // Карта мира — изображение
     var mapImageData: Data? = nil
     var mapDescription: String = ""
@@ -145,6 +147,34 @@ final class WorldBuilding {
     var project: WritingProject?
 
     init() {}
+}
+
+@Model
+final class WorldLocation {
+    var id: UUID = UUID()
+    var name: String = ""
+    var type: String = ""
+    var shortDescription: String = ""
+    var atmosphere: String = ""
+    var geography: String = ""
+    var photoData: Data? = nil
+    var info: String = ""
+    var artifacts: String = ""
+    var organizations: String = ""
+    var events: String = ""
+
+    var chapters: [Chapter] = []
+    var characters: [Character] = []
+
+    @Relationship(deleteRule: .cascade) var timeline: [TimelineEvent] = []
+
+    var parentID: UUID? = nil
+
+    var worldBuilding: WorldBuilding?
+
+    init(name: String) {
+        self.name = name
+    }
 }
 
 @Model

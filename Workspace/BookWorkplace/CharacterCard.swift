@@ -10,14 +10,32 @@ struct CharacterListView: View {
     @State private var newCharacterName = ""
 
     var body: some View {
-        List(project.characters, id: \.id, selection: $selectedCharacter) { character in
-            CharacterRowView(character: character)
-                .tag(character)
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(project.characters, id: \.persistentModelID) { character in
+                    let isSelected = selectedCharacter?.persistentModelID == character.persistentModelID
+                    Button { selectedCharacter = character } label: {
+                        CharacterRowView(character: character, isSelected: isSelected)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(isSelected ? Color("AccentColor").opacity(0.12) : Color.clear)
+                            )
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
+        .background(Color("PrimaryAccent"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { isAddingCharacter = true } label: {
                     Image(systemName: "plus")
+                        .foregroundStyle(Color("PrimaryText"))
                 }
             }
         }
@@ -28,11 +46,19 @@ struct CharacterListView: View {
         }
         .overlay {
             if project.characters.isEmpty {
-                ContentUnavailableView(
-                    "Персонажей пока нет",
-                    systemImage: "person.2.slash",
-                    description: Text("Нажмите «+» чтобы добавить первого")
-                )
+                ZStack {
+                    Color("PrimaryAccent").ignoresSafeArea()
+                    VStack(spacing: 8) {
+                        Image(systemName: "person.2.slash")
+                            .font(.system(size: 36))
+                            .foregroundStyle(Color("SecondaryText").opacity(0.4))
+                        Text("Персонажей пока нет")
+                            .foregroundStyle(Color("SecondaryText"))
+                        Text("Нажмите «+» чтобы добавить первого")
+                            .font(.caption)
+                            .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                    }
+                }
             }
         }
     }
@@ -53,6 +79,7 @@ struct CharacterListView: View {
 
 struct CharacterRowView: View {
     var character: Character
+    var isSelected: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -77,14 +104,14 @@ struct CharacterRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(character.name)
                     .font(.body)
+                    .foregroundStyle(isSelected ? Color("AccentColor") : Color("PrimaryText"))
                 if !character.role.isEmpty {
                     Text(character.role)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color("SecondaryText"))
                 }
             }
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -145,7 +172,7 @@ struct CharacterCardView: View {
                             TextField("Роль (главный герой, злодей...)", text: $character.role)
                                 .font(.subheadline)
                                 .textFieldStyle(.plain)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color("SecondaryText"))
                         }
                     }
                     .padding(.horizontal, 40)
@@ -159,42 +186,42 @@ struct CharacterCardView: View {
                         AgeField(age: $character.age)
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     CardSection(icon: "eye", title: "Внешность") {
                         GrowingTextEditor(text: $character.appearance,
                                           placeholder: "Опишите внешность персонажа...")
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     CardSection(icon: "book.closed", title: "Биография") {
                         GrowingTextEditor(text: $character.biography,
                                           placeholder: "История жизни, ключевые события...")
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     CardSection(icon: "bolt", title: "Способности") {
                         GrowingTextEditor(text: $character.abilities,
                                           placeholder: "Магия, навыки, таланты...")
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     CardSection(icon: "mappin.and.ellipse", title: "Локации") {
                         GrowingTextEditor(text: $character.locations,
                                           placeholder: "Места где обитает или бывал персонаж...")
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     CardSection(icon: "theatermasks", title: "Роль в сюжете") {
                         GrowingTextEditor(text: $character.plotRole,
                                           placeholder: "Какую функцию выполняет в истории...")
                     }
 
-                    Divider()
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     ChapterAppearancesSection(character: character, onChapterTap: onChapterTap)
                 }
@@ -227,6 +254,7 @@ struct CharacterCardView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
+                        .foregroundStyle(Color("PrimaryText"))
                 }
             }
         }
@@ -255,7 +283,7 @@ struct CardSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: icon)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color("SecondaryText"))
                 .textCase(.uppercase)
                 .tracking(0.8)
             content()
@@ -283,7 +311,7 @@ struct GrowingTextEditor: View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty {
                 Text(placeholder)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
                     .padding(.top, 4)
                     .padding(.leading, 4)
             }
