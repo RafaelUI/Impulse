@@ -17,6 +17,8 @@ struct RichTextEditor: NSViewRepresentable {
     var fontSize: Double
     var horizontalPadding: Double
     var topPadding: Double
+    /// Поисковый запрос из тулбара — подсвечивает совпадения в тексте
+    var searchQuery: String = ""
 
     // MARK: makeNSView
 
@@ -87,6 +89,12 @@ struct RichTextEditor: NSViewRepresentable {
         if currentRTF != rtfData {
             loadContent(into: textView)
         }
+
+        // Обновляем подсветку поискового запроса если он изменился
+        if context.coordinator.lastHighlightedQuery != searchQuery {
+            context.coordinator.lastHighlightedQuery = searchQuery
+            applyHighlight(to: textView, query: searchQuery)
+        }
     }
 
     // MARK: makeCoordinator
@@ -96,6 +104,36 @@ struct RichTextEditor: NSViewRepresentable {
     }
 
     // MARK: - Helpers
+
+    private func applyHighlight(to textView: NSTextView, query: String) {
+        guard let storage = textView.textStorage else { return }
+        let fullRange = NSRange(location: 0, length: storage.length)
+
+        storage.beginEditing()
+        // Сначала убираем все предыдущие подсветки
+        storage.removeAttribute(.backgroundColor, range: fullRange)
+
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            let text = storage.string as NSString
+            var searchStart = 0
+            while searchStart < storage.length {
+                let range = text.range(
+                    of: trimmed,
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    range: NSRange(location: searchStart, length: storage.length - searchStart)
+                )
+                guard range.location != NSNotFound else { break }
+                storage.addAttribute(
+                    .backgroundColor,
+                    value: NSColor(named: "AccentColor")?.withAlphaComponent(0.35) ?? NSColor.yellow.withAlphaComponent(0.4),
+                    range: range
+                )
+                searchStart = range.location + max(range.length, 1)
+            }
+        }
+        storage.endEditing()
+    }
 
     private func applyFont(to textView: NSTextView) {
         let font = NSFont(name: "Georgia", size: fontSize)
@@ -142,9 +180,21 @@ struct RichTextEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: RichTextEditor
         var isEditing = false
+        var lastHighlightedQuery: String = ""
 
         init(_ parent: RichTextEditor) {
             self.parent = parent
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView,
+                  let storage = textView.textStorage else { return }
+            // Убираем подсветку как только пользователь начал печатать
+            let fullRange = NSRange(location: 0, length: storage.length)
+            storage.beginEditing()
+            storage.removeAttribute(.backgroundColor, range: fullRange)
+            storage.endEditing()
+            lastHighlightedQuery = ""
         }
 
         func textDidChange(_ notification: Notification) {
