@@ -270,7 +270,7 @@ final class EmbeddingService: ObservableObject {
     func semanticChapterSearch(
         query: String,
         chapters: [Chapter],
-        threshold: Float = 0.18,
+        threshold: Float = 0.30,
         onResult: @escaping (SearchResult) -> Void
     ) async {
         guard isReady else { return }
@@ -280,6 +280,8 @@ final class EmbeddingService: ObservableObject {
         let chunkOverlap = 20   // перекрытие между кусками
 
         for chapter in chapters {
+            // Не ищем семантически по главам без текста — только название даёт ненадёжные скоры
+            guard !chapter.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             let fullText = [chapter.title, chapter.text]
                 .filter { !$0.isEmpty }.joined(separator: " ")
             guard !fullText.isEmpty else { continue }

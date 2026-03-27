@@ -219,7 +219,7 @@ struct ProjectSearchView: View {
     @ViewBuilder
     private func sectionHeader(
         icon: String,
-        title: String,
+        title: LocalizedStringKey,
         count: Int,
         isLoading: Bool = false,
         progress: Int = 0,
@@ -229,7 +229,7 @@ struct ProjectSearchView: View {
             Image(systemName: icon)
                 .font(.system(size: 11))
                 .foregroundStyle(Color("AccentColor").opacity(0.7))
-            Text(title.uppercased())
+            Text(title)
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(Color("SecondaryText"))

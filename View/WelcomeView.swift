@@ -206,15 +206,13 @@ private struct AboutPopoverView: View {
 
             // Ссылки
             VStack(spacing: 0) {
-                AboutLinkRow(icon: "globe", label: "Website", url: "https://impulsewriting.app")
+                AboutLinkRow(icon: "globe", label: "Website", url: "https://impulseleap.com")
                 Divider().padding(.leading, 36)
-                AboutLinkRow(icon: "lock.shield", label: "Privacy Policy", url: "https://impulsewriting.app/privacy")
+                AboutLinkRow(icon: "lock.shield", label: "Privacy Policy", url: "https://impulseleap.com/privacy")
                 Divider().padding(.leading, 36)
-                AboutLinkRow(icon: "doc.text", label: "Terms of Service", url: "https://impulsewriting.app/terms")
+                AboutLinkRow(icon: "envelope", label: "Support", url: "mailto:hello@impulseleap.com")
                 Divider().padding(.leading, 36)
-                AboutLinkRow(icon: "envelope", label: "Support", url: "mailto:support@impulsewriting.app")
-                Divider().padding(.leading, 36)
-                AboutLinkRow(icon: "book.pages", label: "Help", url: "https://impulsewriting.app/help")
+                AboutLinkRow(icon: "book.pages", label: "Help", url: "https://impulseleap.com/impulse")
             }
             .padding(.vertical, 4)
         }

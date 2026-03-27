@@ -69,7 +69,7 @@ struct ColumnHeaderStrip: View {
     var columns: [TimelineColumnItem]
     var scale: CGFloat
     var totalColumns: Int = 5
-    var emptyLabel: String = "Нет элементов"
+    var emptyLabel: LocalizedStringKey = "Нет элементов"
 
     var body: some View {
         let colW = chapterColumnWidth * scale
