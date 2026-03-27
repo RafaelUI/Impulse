@@ -15,6 +15,7 @@ public extension Notification.Name {
     let availableLanguages: [(id: String, label: String)] = [
         ("ru", "Русский"),
         ("en", "English"),
+        ("de", "Deutsch"),
     ]
 
     var currentLocale: Locale { Locale(identifier: currentLanguage) }

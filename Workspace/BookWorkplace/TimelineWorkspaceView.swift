@@ -6,19 +6,30 @@ import SwiftData
 struct TimelineWorkspaceView: View {
     @Bindable var project: WritingProject
     @Binding var selectedTrack: TimelineTrack?
+    /// Если передан — используется как шапка колонок; иначе берутся главы проекта.
+    var columns: [TimelineColumnItem]? = nil
+    /// Кастомный сайдбар для выбранного узла. Если nil — используется стандартный (с персонажами и локациями).
+    var sidebarView: ((TimelineTrack, UUID, @escaping () -> Void, @escaping () -> Void) -> AnyView)? = nil
     @Environment(\.modelContext) private var modelContext
 
     @State private var isAdding = false
     @State private var newTrackName = ""
     @State private var renamingTrack: TimelineTrack? = nil
     @State private var renamingTitle = ""
+    @State private var canvasScale: CGFloat = 1.0
+
+    /// Выбранный узел: (trackIdx, nodeID)
+    @State private var selectedNode: (trackIdx: Int, nodeID: UUID)? = nil
 
     private var sorted: [TimelineTrack] {
-        project.timelineTracks.sorted { $0.orderIndex < $1.orderIndex }
+        (project.timelineTracks ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    private var sortedChapters: [Chapter] {
-        project.chapters.sorted { $0.orderIndex < $1.orderIndex }
+    private var resolvedColumns: [TimelineColumnItem] {
+        if let columns { return columns }
+        return (project.chapters ?? [])
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .map { TimelineColumnItem(id: $0.id, title: $0.title) }
     }
 
     var body: some View {
@@ -32,35 +43,58 @@ struct TimelineWorkspaceView: View {
                 .fill(Color("Border"))
                 .frame(width: 0.5)
 
-            // ── Правая часть: редактор ─────────────────────────────
-            VStack(spacing: 0) {
-                // ── Полоса глав ────────────────────────────────────
-                ChapterStrip(chapters: sortedChapters)
-
-                Rectangle()
-                    .fill(Color("Border"))
-                    .frame(height: 0.5)
-
-                // ── Единый редактор таймлайна ──────────────────────
-                ZStack(alignment: .topLeading) {
-                    if project.timelineContent.isEmpty {
-                        Text("Начните описывать хронологию событий...")
-                            .foregroundStyle(Color("SecondaryText").opacity(0.5))
-                            .font(.system(size: 17, design: .serif))
-                            .padding(.top, 48)
-                            .padding(.leading, 36)
-                            .allowsHitTesting(false)
+            // ── Правая часть: канвас + sidebar поверх ─────────────
+            ZStack(alignment: .trailing) {
+                TimelineCanvasScrollView(
+                    tracks: sorted,
+                    columns: resolvedColumns,
+                    scale: canvasScale,
+                    onSave: { try? modelContext.save() },
+                    onSelectNode: { sel in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedNode = sel
+                        }
                     }
-                    TextEditor(text: $project.timelineContent)
-                        .font(.system(size: 17, design: .serif))
-                        .padding(.horizontal, 30)
-                        .padding(.top, 40)
-                        .scrollContentBackground(.hidden)
+                )
+
+                // Ползунок масштаба — правый нижний угол
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        TimelineScaleSlider(scale: $canvasScale)
+                            .frame(width: 220)
+                            .padding(12)
+                    }
                 }
-                .background(Color("Editor"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onChange(of: project.timelineContent) { _, _ in
-                    try? modelContext.save()
+
+                // Sidebar поверх канваса
+                if let sel = selectedNode,
+                   sel.trackIdx < sorted.count {
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color("Border"))
+                            .frame(width: 0.5)
+                        let track = sorted[sel.trackIdx]
+                        let closeSidebar = {
+                            withAnimation(.easeInOut(duration: 0.2)) { selectedNode = nil }
+                        }
+                        let saveFn = { try? modelContext.save() }
+                        if let builder = sidebarView {
+                            builder(track, sel.nodeID, { saveFn() }, closeSidebar)
+                        } else {
+                            TimelineNodeSidebarView(
+                                track: track,
+                                nodeID: sel.nodeID,
+                                project: project,
+                                onSave: { saveFn() },
+                                onClose: closeSidebar
+                            )
+                        }
+                    }
+                    .frame(width: 281)
+                    .background(Color("PrimaryAccent"))
+                    .transition(.move(edge: .trailing))
                 }
             }
         }
@@ -71,19 +105,19 @@ struct TimelineWorkspaceView: View {
     @ViewBuilder
     private var trackList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Заголовок ─────────────────────────────────────────
+            // ── Заголовок (высота = timelineHeaderHeight) ──────────
             Text("Треки")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color("PrimaryText").opacity(0.4))
                 .textCase(.uppercase)
                 .tracking(0.8)
                 .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 40)
+                .padding(.bottom, 12)
+                .frame(height: timelineHeaderHeight, alignment: .bottom)
 
             // ── Список ────────────────────────────────────────────
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 0) {
                     ForEach(sorted, id: \.id) { track in
                         TrackRow(
                             track: track,
@@ -96,12 +130,12 @@ struct TimelineWorkspaceView: View {
                                 try? modelContext.save()
                             }
                         )
+                        .frame(height: timelineTrackHeight)
                     }
                 }
-                .padding(.vertical, 4)
             }
             .overlay {
-                if project.timelineTracks.isEmpty {
+                if (project.timelineTracks ?? []).isEmpty {
                     ZStack {
                         Color("PrimaryAccent")
                         VStack(spacing: 8) {
@@ -191,58 +225,12 @@ struct TimelineWorkspaceView: View {
     private func addTrack() {
         let title = newTrackName.trimmingCharacters(in: .whitespaces)
         guard !title.isEmpty else { return }
-        let track = TimelineTrack(title: title, orderIndex: project.timelineTracks.count)
+        let track = TimelineTrack(title: title, orderIndex: (project.timelineTracks ?? []).count)
         track.project = project
-        project.timelineTracks.append(track)
+        project.timelineTracks = (project.timelineTracks ?? []) + [track]
         modelContext.insert(track)
         try? modelContext.save()
         newTrackName = ""
-    }
-}
-
-// MARK: - Chapter Strip
-
-private struct ChapterStrip: View {
-    var chapters: [Chapter]
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                if chapters.isEmpty {
-                    Text("Глав пока нет")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color("SecondaryText").opacity(0.4))
-                        .padding(.horizontal, 4)
-                } else {
-                    ForEach(chapters, id: \.id) { chapter in
-                        ChapterChip(title: chapter.title.isEmpty ? "Без названия" : chapter.title)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-        }
-        .frame(height: 44)
-        .background(Color("PrimaryAccent"))
-    }
-}
-
-// MARK: - Chapter Chip
-
-private struct ChapterChip: View {
-    var title: String
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(Color("AccentColor"))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Color("AccentColor").opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color("AccentColor").opacity(0.25), lineWidth: 0.5)
-            )
     }
 }
 
@@ -275,3 +263,36 @@ private struct TrackRow: View {
         }
     }
 }
+// MARK: - Scale Slider
+
+struct TimelineScaleSlider: View {
+    @Binding var scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "minus")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color("AccentColor").opacity(0.8))
+                .onTapGesture {
+                    scale = max(0.25, scale - 0.25)
+                }
+            Slider(value: $scale, in: 0.25...4.0)
+                .tint(Color("AccentColor"))
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color("AccentColor").opacity(0.8))
+                .onTapGesture {
+                    scale = min(4.0, scale + 0.25)
+                }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color("Editor"))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color("Border"), lineWidth: 0.5)
+        )
+    }
+}
+

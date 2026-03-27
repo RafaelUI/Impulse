@@ -17,7 +17,9 @@ struct SearchResult: Identifiable {
     var worldConcept: WorldConcept?         = nil
     var worldStructure: WorldStructure?     = nil
     var worldMetaphysics: MetaphysicsConcept? = nil
-    var timelineEvent: TimelineEvent?       = nil
+    // Screenplay
+    var scene: ScreenScene?          = nil
+    var screenRole: ScreenRole?     = nil
 }
 
 enum SearchResultType: String {
@@ -27,8 +29,8 @@ enum SearchResultType: String {
     case worldConcept   = "Концепция"
     case worldStructure = "Структура мира"
     case metaphysics    = "Метафизика"
-    case timeline       = "Таймлайн"
-
+    case scene          = "Сцена"
+    case screenRole     = "Роль"
     var icon: String {
         switch self {
         case .chapter:        return "doc.text"
@@ -37,7 +39,8 @@ enum SearchResultType: String {
         case .worldConcept:   return "lightbulb.fill"
         case .worldStructure: return "building.columns.fill"
         case .metaphysics:    return "atom"
-        case .timeline:       return "calendar"
+        case .scene:          return "film"
+        case .screenRole:     return "person.crop.rectangle"
         }
     }
 }
@@ -47,8 +50,7 @@ enum SearchResultType: String {
 enum SearchMode: String, CaseIterable {
     case semantic = "По смыслу"
     case keyword  = "По словам"
-    case combined = "Комбинированный"
-}
+    case combined = "Комбинированный"}
 
 // MARK: - Embedding Service
 
@@ -73,23 +75,21 @@ final class EmbeddingService: ObservableObject {
         Task { await load() }
     }
 
-    // MARK: - Загрузка
-
     private func load() async {
-        let loadedModel: float16_model? = await Task.detached(priority: .background) {
+        let loadedMLModel: MLModel? = await Task.detached(priority: .background) {
             guard let url = Bundle.main.url(forResource: "float16_model", withExtension: "mlmodelc")
                          ?? Bundle.main.url(forResource: "float16_model", withExtension: "mlpackage") else {
                 return nil
             }
             let config = MLModelConfiguration()
             config.computeUnits = .all
-            guard let mlModel = try? MLModel(contentsOf: url, configuration: config) else { return nil }
-            return float16_model(model: mlModel)
+            return try? MLModel(contentsOf: url, configuration: config)
         }.value
+        let loadedModel: float16_model? = loadedMLModel.map { float16_model(model: $0) }
 
         guard let vocabURL = Bundle.main.url(forResource: "vocab", withExtension: "txt"),
               let content = try? String(contentsOf: vocabURL, encoding: .utf8) else {
-            print("❌ vocab.txt не найден")
+            return
             return
         }
 
@@ -102,7 +102,7 @@ final class EmbeddingService: ObservableObject {
         self.model = loadedModel
         self.vocab = loadedVocab
         self.isReady = loadedModel != nil
-        print("✅ EmbeddingService готов, словарь: \(loadedVocab.count) токенов")
+
     }
 
     // MARK: - Главный метод поиска
@@ -139,7 +139,7 @@ final class EmbeddingService: ObservableObject {
         var results: [SearchResult] = []
 
         // Главы — по названию и тексту
-        for chapter in project.chapters {
+        for chapter in project.chapters ?? [] {
             let fields = [chapter.title, chapter.text, chapter.notes]
             if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: chapter.text) {
                 results.append(SearchResult(
@@ -153,10 +153,10 @@ final class EmbeddingService: ObservableObject {
         }
 
         // Персонажи — по всем полям
-        for character in project.characters {
+        for character in project.characters ?? [] {
             let fields = [character.name, character.role, character.biography,
                          character.appearance, character.plotRole,
-                         character.abilities, character.locations]
+                         character.abilities]
             let fullText = fields.joined(separator: " ")
             if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fullText) {
                 results.append(SearchResult(
@@ -169,10 +169,42 @@ final class EmbeddingService: ObservableObject {
             }
         }
 
+        // Сцены (сценарий) — ищем по заголовку, заметкам и текстам всех вариаций
+        for scene in project.scenes ?? [] {
+            let variationTexts = scene.variations.map { $0.text }
+            let allVariationsText = variationTexts.joined(separator: " ")
+            let fields = [scene.title, allVariationsText, scene.notes]
+            let bestSnippetSource = variationTexts.first(where: { !$0.isEmpty }) ?? scene.text
+            if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: bestSnippetSource) {
+                results.append(SearchResult(
+                    type: .scene,
+                    title: scene.title.isEmpty ? "Без названия" : scene.title,
+                    snippet: snippet,
+                    score: score,
+                    scene: scene
+                ))
+            }
+        }
+
+        // Роли (сценарий)
+        for role in project.screenRoles ?? [] {
+            let fields = [role.name, role.role, role.biography, role.appearance, role.plotRole, role.abilities]
+            let fullText = fields.joined(separator: " ")
+            if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fullText) {
+                results.append(SearchResult(
+                    type: .screenRole,
+                    title: role.name,
+                    snippet: snippet,
+                    score: score,
+                    screenRole: role
+                ))
+            }
+        }
+
         // Мироустройство
         if let world = project.worldBuilding {
 
-            for resource in world.resources {
+            for resource in world.resources ?? [] {
                 let fields = [resource.name, resource.details, resource.rules, resource.limitations]
                 if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fields.joined(separator: " ")) {
                     results.append(SearchResult(
@@ -185,7 +217,7 @@ final class EmbeddingService: ObservableObject {
                 }
             }
 
-            for concept in world.concepts {
+            for concept in world.concepts ?? [] {
                 let fields = [concept.name, concept.details, concept.category]
                 if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fields.joined(separator: " ")) {
                     results.append(SearchResult(
@@ -198,7 +230,7 @@ final class EmbeddingService: ObservableObject {
                 }
             }
 
-            for structure in world.structures {
+            for structure in world.structures ?? [] {
                 let fields = [structure.name, structure.type, structure.details]
                 if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fields.joined(separator: " ")) {
                     results.append(SearchResult(
@@ -211,7 +243,7 @@ final class EmbeddingService: ObservableObject {
                 }
             }
 
-            for meta in world.metaphysics {
+            for meta in world.metaphysics ?? [] {
                 let fields = [meta.name, meta.details, meta.implications]
                 if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fields.joined(separator: " ")) {
                     results.append(SearchResult(
@@ -225,25 +257,132 @@ final class EmbeddingService: ObservableObject {
             }
         }
 
-        // Таймлайн — из глав и персонажей
-        var allEvents: [TimelineEvent] = []
-        allEvents += project.chapters.flatMap { $0.timeline }
-        allEvents += project.characters.flatMap { $0.timeline }
-
-        for event in allEvents {
-            let fields = [event.title, event.details, event.date]
-            if let (score, snippet) = keywordScore(terms: terms, in: fields, fullText: fields.joined(separator: " ")) {
-                results.append(SearchResult(
-                    type: .timeline,
-                    title: event.title,
-                    snippet: snippet,
-                    score: score,
-                    timelineEvent: event
-                ))
-            }
-        }
-
         return results.sorted { $0.score > $1.score }
+    }
+
+    // MARK: - Semantic Chapter Search (sliding window по тексту глав)
+    //
+    // Делит текст главы на перекрывающиеся куски по chunkSize токенов,
+    // считает эмбеддинг каждого куска и берёт максимальную схожесть.
+    // Результаты отдаёт через AsyncStream — по одной главе за раз,
+    // чтобы UI мог показывать их прогрессивно.
+
+    func semanticChapterSearch(
+        query: String,
+        chapters: [Chapter],
+        threshold: Float = 0.18,
+        onResult: @escaping (SearchResult) -> Void
+    ) async {
+        guard isReady else { return }
+        guard let queryEmbedding = embed(text: query) else { return }
+
+        let chunkSize   = 100   // токены на кусок (оставляем запас до 128)
+        let chunkOverlap = 20   // перекрытие между кусками
+
+        for chapter in chapters {
+            let fullText = [chapter.title, chapter.text]
+                .filter { !$0.isEmpty }.joined(separator: " ")
+            guard !fullText.isEmpty else { continue }
+
+            // Токенизируем весь текст один раз — используем слова как единицу разбивки
+            let words = fullText.lowercased()
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+
+            guard !words.isEmpty else { continue }
+
+            // Строим куски слов и считаем эмбеддинг каждого
+            var bestScore: Float = 0
+            let stride = max(chunkSize - chunkOverlap, 1)
+            var start = 0
+
+            while start < words.count {
+                let end = min(start + chunkSize, words.count)
+                let chunkWords = words[start..<end]
+                let chunkText = chunkWords.joined(separator: " ")
+
+                if let chunkEmb = embed(text: chunkText) {
+                    let score = cosineSimilarity(queryEmbedding, chunkEmb)
+                    if score > bestScore { bestScore = score }
+                }
+
+                if end == words.count { break }
+                start += stride
+            }
+
+            if bestScore > threshold {
+                let result = SearchResult(
+                    type: .chapter,
+                    title: chapter.title.isEmpty ? "Без названия" : chapter.title,
+                    snippet: makeSnippet(from: chapter.text, query: query),
+                    score: bestScore,
+                    chapter: chapter
+                )
+                onResult(result)
+            }
+
+            // Даём UI шанс обновиться между главами
+            await Task.yield()
+        }
+    }
+
+    // MARK: - Semantic Scene Search (sliding window по тексту вариаций сцен)
+
+    func semanticSceneSearch(
+        query: String,
+        scenes: [ScreenScene],
+        threshold: Float = 0.18,
+        onResult: @escaping (SearchResult) -> Void
+    ) async {
+        guard isReady else { return }
+        guard let queryEmbedding = embed(text: query) else { return }
+
+        let chunkSize    = 100
+        let chunkOverlap = 20
+        let stride       = max(chunkSize - chunkOverlap, 1)
+
+        for scene in scenes {
+            // Объединяем тексты всех вариаций для полноты поиска
+            let variationTexts = scene.variations.map { $0.text }.filter { !$0.isEmpty }
+            let fullText = ([scene.title] + variationTexts)
+                .filter { !$0.isEmpty }.joined(separator: " ")
+            guard !fullText.isEmpty else { continue }
+
+            let words = fullText.lowercased()
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+            guard !words.isEmpty else { continue }
+
+            var bestScore: Float = 0
+            var start = 0
+
+            while start < words.count {
+                let end = min(start + chunkSize, words.count)
+                let chunkText = words[start..<end].joined(separator: " ")
+
+                if let chunkEmb = embed(text: chunkText) {
+                    let score = cosineSimilarity(queryEmbedding, chunkEmb)
+                    if score > bestScore { bestScore = score }
+                }
+
+                if end == words.count { break }
+                start += stride
+            }
+
+            if bestScore > threshold {
+                let snippetSource = variationTexts.first ?? ""
+                let result = SearchResult(
+                    type: .scene,
+                    title: scene.title.isEmpty ? "Без названия" : scene.title,
+                    snippet: makeSnippet(from: snippetSource, query: query),
+                    score: bestScore,
+                    scene: scene
+                )
+                onResult(result)
+            }
+
+            await Task.yield()
+        }
     }
 
     // MARK: - Semantic Search (главы + персонажи)
@@ -254,11 +393,11 @@ final class EmbeddingService: ObservableObject {
 
         var results: [SearchResult] = []
 
-        for chapter in project.chapters {
+        for chapter in project.chapters ?? [] {
             let text = [chapter.title, chapter.text].filter { !$0.isEmpty }.joined(separator: " ")
             guard !text.isEmpty, let emb = embed(text: text) else { continue }
             let score = cosineSimilarity(queryEmbedding, emb)
-            if score > 0.25 {
+            if score > 0.20 {
                 results.append(SearchResult(
                     type: .chapter,
                     title: chapter.title.isEmpty ? "Без названия" : chapter.title,
@@ -269,13 +408,13 @@ final class EmbeddingService: ObservableObject {
             }
         }
 
-        for character in project.characters {
+        for character in project.characters ?? [] {
             let text = [character.name, character.role, character.biography,
                         character.appearance, character.plotRole]
                 .filter { !$0.isEmpty }.joined(separator: " ")
             guard !text.isEmpty, let emb = embed(text: text) else { continue }
             let score = cosineSimilarity(queryEmbedding, emb)
-            if score > 0.25 {
+            if score > 0.20 {
                 let snippet = [character.role, character.biography].first(where: { !$0.isEmpty }) ?? ""
                 results.append(SearchResult(
                     type: .character,
@@ -295,8 +434,8 @@ final class EmbeddingService: ObservableObject {
     private func merge(semantic: [SearchResult], keyword: [SearchResult]) -> [SearchResult] {
         var merged: [String: SearchResult] = [:]
 
-        // Ключ для дедупликации — тип + заголовок
-        func key(_ r: SearchResult) -> String { "\(r.type.rawValue):\(r.title)" }
+        // Ключ для дедупликации — тип + заголовок (lower-cased для надёжности)
+        func key(_ r: SearchResult) -> String { "\(r.type.rawValue):\(r.title.lowercased())" }
 
         for result in semantic {
             merged[key(result)] = result
@@ -305,24 +444,22 @@ final class EmbeddingService: ObservableObject {
         for result in keyword {
             let k = key(result)
             if let existing = merged[k] {
-                // Если уже есть из семантики — поднимаем score
-                var boosted = existing
-                let combined = min(existing.score * 0.7 + result.score * 0.3, 1.0)
+                // Оба метода нашли один элемент — берём лучший score и дополнительно бустим
+                let combined = min(max(existing.score, result.score) + 0.05, 1.0)
                 merged[k] = SearchResult(
-                    type: boosted.type,
-                    title: boosted.title,
-                    snippet: boosted.snippet.isEmpty ? result.snippet : boosted.snippet,
+                    type: existing.type,
+                    title: existing.title,
+                    snippet: existing.snippet.isEmpty ? result.snippet : existing.snippet,
                     score: combined,
-                    chapter: boosted.chapter,
-                    character: boosted.character,
-                    worldResource: result.worldResource,
-                    worldConcept: result.worldConcept,
-                    worldStructure: result.worldStructure,
-                    worldMetaphysics: result.worldMetaphysics,
-                    timelineEvent: result.timelineEvent
+                    chapter: existing.chapter,
+                    character: existing.character,
+                    worldResource: existing.worldResource ?? result.worldResource,
+                    worldConcept: existing.worldConcept ?? result.worldConcept,
+                    worldStructure: existing.worldStructure ?? result.worldStructure,
+                    worldMetaphysics: existing.worldMetaphysics ?? result.worldMetaphysics
                 )
             } else {
-                // Новый тип из keyword (мироустройство, таймлайн)
+                // Только keyword нашёл (мироустройство, таймлайн) — включаем как есть
                 merged[k] = result
             }
         }
@@ -335,7 +472,6 @@ final class EmbeddingService: ObservableObject {
     /// Возвращает (score, snippet) если хотя бы один термин найден
     private func keywordScore(terms: [String], in fields: [String], fullText: String) -> (Float, String)? {
         let lowerFields = fields.map { $0.lowercased() }
-        let lowerFull   = fullText.lowercased()
 
         var matchCount = 0
         var totalWeight: Float = 0
@@ -357,9 +493,11 @@ final class EmbeddingService: ObservableObject {
 
         guard matchCount > 0 else { return nil }
 
-        // Нормализуем score: чем больше совпадений — тем выше
-        let maxPossible = Float(terms.count) * Float(fields.count) * 2.0
-        let score = min(totalWeight / maxPossible + 0.3, 0.99)
+        // Нормализуем score: совпадение в названии (вес 2) vs тексте (вес 1).
+        // Диапазон 0.3–0.95: title-only → ~0.3, полное покрытие → ~0.95.
+        let maxPossible = Float(terms.count) * 2.0   // лучший случай: все термины в названии
+        let normalized = min(totalWeight / maxPossible, 1.0)
+        let score = Float(0.30) + normalized * Float(0.65)
 
         return (score, bestSnippet)
     }
@@ -392,10 +530,19 @@ final class EmbeddingService: ObservableObject {
 
         var ids: [Int] = [clsToken]
         for word in words {
-            ids.append(contentsOf: wordPiece(word: word))
-            if ids.count >= maxLength - 1 { break }
+            let pieces = wordPiece(word: word)
+            // Оставляем место для [SEP]: максимум maxLength - 1 токенов перед добавлением
+            if ids.count + pieces.count > maxLength - 1 {
+                // Добавляем только то, что влезает
+                let remaining = (maxLength - 1) - ids.count
+                if remaining > 0 { ids.append(contentsOf: pieces.prefix(remaining)) }
+                break
+            }
+            ids.append(contentsOf: pieces)
         }
         ids.append(sepToken)
+        // Гарантируем точный размер maxLength
+        ids = Array(ids.prefix(maxLength))
 
         let realLength = ids.count
         while ids.count < maxLength { ids.append(padToken) }
@@ -428,7 +575,7 @@ final class EmbeddingService: ObservableObject {
 
     private func makeMultiArray(_ values: [Int]) -> MLMultiArray? {
         guard let arr = try? MLMultiArray(shape: [1, NSNumber(value: maxLength)], dataType: .int32) else { return nil }
-        for (i, v) in values.enumerated() { arr[i] = NSNumber(value: Int32(v)) }
+        for (i, v) in values.prefix(maxLength).enumerated() { arr[i] = NSNumber(value: Int32(v)) }
         return arr
     }
 

@@ -1,0 +1,36 @@
+KEYBOARD SHORTCUTS — Impulse Writing Studio
+============================================
+
+FORMAT MENU (menu bar → Формат)
+---------------------------------
+⌘⇧1   Заголовок        (Georgia 22pt Bold, applied to paragraph)
+⌘⇧2   Подзаголовок     (Georgia 17pt Bold, applied to paragraph)
+⌘Y    Курсив           (toggle italic on selection)
+⌘U    Подчёркнутый     (toggle underline on selection)
+
+EDITOR
+-------
+⌘⇧F   Открыть в окне фокуса   (Chapter editor — books)
+⌘⇧F   Открыть в окне фокуса   (Scene editor — screenplays)
+
+SCREENPLAYS
+------------
+⌘I    Инспектор сцены (SceneInfoView)
+
+    (конфликт с курсивом устранён — курсив переназначен на ⌘Y)
+
+KEYBOARD SHORTCUTS REFERENCE PANEL
+-------------------------------------
+Esc   Закрыть панель горячих клавиш (KeyboardShortcuts.swift)
+
+SYSTEM / APPKIT DEFAULTS (not defined in code, provided by macOS)
+-------------------------------------------------------------------
+⌘Z    Отменить
+⌘⇧Z  Повторить
+⌘X    Вырезать
+⌘C    Копировать
+⌘V    Вставить
+⌘A    Выделить всё
+⌘S    Сохранить (SwiftData сохраняет автоматически — не назначено)
+⌘W    Закрыть окно
+⌘Q    Выйти

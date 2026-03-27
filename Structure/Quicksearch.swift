@@ -12,9 +12,11 @@ import SwiftUI
 
 struct WorkspaceSearchBar: View {
     let project: WritingProject
+    /// Ограничить выдачу конкретными типами. Nil — все типы (поведение по умолчанию).
+    var allowedTypes: Set<SearchResultType>? = nil
     let onSelect: (SearchResult) -> Void
 
-    @StateObject private var service = EmbeddingService.shared
+    @ObservedObject private var service = EmbeddingService.shared
     @State private var query = ""
     @State private var results: [SearchResult] = []
     @State private var isExpanded = false
@@ -56,20 +58,21 @@ struct WorkspaceSearchBar: View {
 
             // ── Выпадающие результаты ──────────────────────────────
             .popover(isPresented: $isExpanded, arrowEdge: .bottom) {
+                let visible = Array(results.prefix(15))
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(results.prefix(8).enumerated()), id: \.element.id) { _, result in
+                        ForEach(visible, id: \.id) { result in
                             SearchDropdownRow(result: result) {
                                 onSelect(result)
                                 clearSearch()
                             }
-                            if result.id != results.prefix(8).last?.id {
+                            if result.id != visible.last?.id {
                                 Divider().padding(.leading, 50)
                             }
                         }
                     }
                 }
-                .frame(width: 320, height: min(CGFloat(results.count) * 52, 320))
+                .frame(width: 400, height: min(CGFloat(visible.count) * 56, 500))
             }
         }
         // Закрытие при клике за пределами
@@ -90,7 +93,11 @@ struct WorkspaceSearchBar: View {
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled else { return }
-            let found = await service.search(query: text, in: project)
+            // Тулбар-поиск — только по ключевым словам, быстро и без CoreML
+            var found = service.keywordSearch(query: text, in: project)
+            if let allowed = allowedTypes {
+                found = found.filter { allowed.contains($0.type) }
+            }
             await MainActor.run {
                 results = found
                 isExpanded = !found.isEmpty
@@ -126,7 +133,7 @@ private struct SearchDropdownRow: View {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color("AccentColor").opacity(0.10))
                         .frame(width: 28, height: 28)
-                    Image(systemName: result.type == .chapter ? "doc.text" : "person.fill")
+                    Image(systemName: result.type.icon)
                         .font(.system(size: 12))
                         .foregroundStyle(Color("AccentColor"))
                 }
@@ -146,7 +153,7 @@ private struct SearchDropdownRow: View {
 
                 Spacer()
 
-                Text(result.type == .chapter ? "Глава" : "Персонаж")
+                Text(LocalizedStringKey(result.type.rawValue))
                     .font(.system(size: 10))
                     .foregroundStyle(Color("AccentColor").opacity(0.6))
                     .padding(.horizontal, 6)

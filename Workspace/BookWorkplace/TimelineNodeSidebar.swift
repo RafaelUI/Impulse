@@ -47,7 +47,7 @@ struct TimelineNodeSidebarView: View {
         else { return AnyView(EmptyView()) }
 
         return AnyView(
-            VStack(spacing: 0) {
+            VStack(spacing: 4) {
                 // Заголовок панели
                 HStack {
                     Label(
@@ -123,8 +123,8 @@ struct TimelineNodeSidebarView: View {
 
     @ViewBuilder
     private func charactersSection(node: TimelineNode) -> some View {
-        let linked = project.characters.filter { node.characterIDs.contains($0.id) }
-        let available = project.characters.filter { !node.characterIDs.contains($0.id) }
+        let linked = (project.characters ?? []).filter { node.characterIDs.contains($0.id) }
+        let available = (project.characters ?? []).filter { !node.characterIDs.contains($0.id) }
 
         VStack(alignment: .leading, spacing: 6) {
             if linked.isEmpty {
@@ -146,7 +146,7 @@ struct TimelineNodeSidebarView: View {
             Button {
                 showCharacterPicker = true
             } label: {
-                Label("Добавить персонажа", systemImage: "plus.circle")
+                Label(title: { Text("Добавить персонажа") }, icon: { Image(systemName: "plus.circle") })
                     .font(.subheadline)
                     .foregroundStyle(Color("AccentColor"))
             }
@@ -189,7 +189,7 @@ struct TimelineNodeSidebarView: View {
             Button {
                 showLocationPicker = true
             } label: {
-                Label("Добавить локацию", systemImage: "plus.circle")
+                Label(title: { Text("Добавить локацию") }, icon: { Image(systemName: "plus.circle") })
                     .font(.subheadline)
                     .foregroundStyle(Color("AccentColor"))
             }
@@ -209,7 +209,7 @@ struct TimelineNodeSidebarView: View {
     // MARK: - Reusable UI
 
     @ViewBuilder
-    private func sectionLabel(_ text: String) -> some View {
+    private func sectionLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(Color("PrimaryText").opacity(0.4))
@@ -248,9 +248,9 @@ struct TimelineNodeSidebarView: View {
 
     private func pickerList<T: Identifiable>(
         items: [T],
-        title: String,
+        title: LocalizedStringKey,
         onSelect: @escaping (T) -> Void,
-        label: (T) -> (primary: String, secondary: String?)
+        label: @escaping (T) -> (primary: String, secondary: String?)
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)

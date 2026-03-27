@@ -61,7 +61,7 @@ struct SceneComparisonView: View {
                 // Список сцен
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(project.scenes.sorted { $0.orderIndex < $1.orderIndex }) { scene in
+                        ForEach((project.scenes ?? []).sorted { $0.orderIndex < $1.orderIndex }) { scene in
                             SceneComparisonRow(
                                 scene: scene,
                                 isExpanded: selectedScene?.id == scene.id,
@@ -91,6 +91,10 @@ struct SceneComparisonView: View {
         selectedScene = nil
     }
 }
+
+// MARK: - Состояние строки вариации
+
+private enum VariationRowState { case none, selectedA, selectedB, disabled }
 
 // MARK: - Строка сцены с раскрывающимися вариациями
 
@@ -149,9 +153,7 @@ private struct SceneComparisonRow: View {
         }
     }
 
-    private enum RowState { case none, selectedA, selectedB, disabled }
-
-    private func rowState(for variation: SceneVariation) -> RowState {
+    private func rowState(for variation: SceneVariation) -> VariationRowState {
         if selectionA?.id == variation.id { return .selectedA }
         if selectionB?.id == variation.id { return .selectedB }
         // Если уже выбраны 2 и это не одна из них — недоступна
@@ -173,10 +175,8 @@ private struct SceneComparisonRow: View {
 
 private struct VariationSelectionRow: View {
     var variation: SceneVariation
-    var state: RowState
+    var state: VariationRowState
     var onTap: () -> Void
-
-    enum RowState { case none, selectedA, selectedB, disabled }
 
     var body: some View {
         Button(action: { if state != .disabled { onTap() } }) {
@@ -184,10 +184,10 @@ private struct VariationSelectionRow: View {
                 // Цветовой индикатор
                 Circle()
                     .fill(indicatorColor)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 13, height: 13)
 
                 Text(variation.title)
-                    .font(.system(size: 13))
+                    .font(.system(size: 16))
                     .foregroundStyle(textColor)
 
                 Spacer()
@@ -230,7 +230,7 @@ private struct VariationSelectionRow: View {
         }
     }
 
-    private func backgroundFor(state: RowState) -> Color {
+    private func backgroundFor(state: VariationRowState) -> Color {
         switch state {
         case .selectedA: return Color.blue.opacity(0.08)
         case .selectedB: return Color.orange.opacity(0.08)
@@ -415,11 +415,15 @@ struct DiffTextView: NSViewRepresentable {
     /// Возвращает индексы токенов в массиве `a`, которых нет в LCS(a, b)
     private func diffUniqueRanges(a: [String], b: [String]) -> Set<Int> {
         let lcs = longestCommonSubsequence(a: a, b: b)
-        var lcsSet = Set(lcs)
+        // Мультисет: считаем сколько раз каждый токен встречается в LCS
+        var lcsCount: [String: Int] = [:]
+        for token in lcs {
+            lcsCount[token, default: 0] += 1
+        }
         var unique: Set<Int> = []
         for (i, token) in a.enumerated() {
-            if lcsSet.contains(token) {
-                lcsSet.remove(token)
+            if let count = lcsCount[token], count > 0 {
+                lcsCount[token] = count - 1
             } else {
                 unique.insert(i)
             }
@@ -430,8 +434,7 @@ struct DiffTextView: NSViewRepresentable {
     /// LCS через динамическое программирование
     private func longestCommonSubsequence(a: [String], b: [String]) -> [String] {
         let m = a.count, n = b.count
-        // Ограничение для производительности на больших текстах
-        guard m <= 2000, n <= 2000 else { return [] }
+        guard m > 0, n > 0, m <= 2000, n <= 2000 else { return [] }
 
         var dp = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
         for i in 1...m {

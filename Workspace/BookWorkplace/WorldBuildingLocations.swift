@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 // MARK: - WorldBuilding: Locations
 
@@ -9,11 +10,9 @@ enum WorldLocationTab: String, CaseIterable, Identifiable {
     case organizations = "Организации"
     case events = "События"
     case chapters = "Главы"
-    case timeline = "Таймлайн"
     case characters = "Персонажи"
 
-    var id: String { rawValue }
-}
+    var id: String { rawValue }}
 
 struct WorldBuildingLocationListView: View {
     var project: WritingProject
@@ -25,7 +24,7 @@ struct WorldBuildingLocationListView: View {
     @State private var newName = ""
 
     private var locations: [WorldLocation] {
-        project.worldBuilding?.locations.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } ?? []
+        (project.worldBuilding?.locations ?? []).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     var body: some View {
@@ -132,7 +131,9 @@ struct WorldBuildingLocationListView: View {
         guard !name.isEmpty else { return }
         let location = WorldLocation(name: name)
         location.worldBuilding = project.worldBuilding
-        project.worldBuilding?.locations.append(location)
+        if project.worldBuilding != nil {
+            project.worldBuilding?.locations = (project.worldBuilding?.locations ?? []) + [location]
+        }
         modelContext.insert(location)
         try? modelContext.save()
         selectedLocation = location
@@ -155,11 +156,9 @@ struct WorldBuildingLocationDetailView: View {
         case .organizations:
             WorldLocationTextTab(text: $location.organizations, placeholder: "Организации, связанные с локацией...")
         case .events:
-            WorldLocationTextTab(text: $location.events, placeholder: "События, связанные с локацией...")
+            WorldLocationEventsTab(location: location)
         case .chapters:
             WorldLocationChaptersTab(location: location)
-        case .timeline:
-            WorldLocationTimelineTab(location: location)
         case .characters:
             WorldLocationCharactersTab(location: location)
         }
@@ -168,7 +167,7 @@ struct WorldBuildingLocationDetailView: View {
 
 private struct WorldLocationTextTab: View {
     @Binding var text: String
-    var placeholder: String
+    var placeholder: LocalizedStringKey
 
     var body: some View {
         ScrollView {
@@ -188,6 +187,7 @@ struct WorldBuildingLocationCardView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showDeleteAlert = false
+    @State private var photoItem: PhotosPickerItem? = nil
 
     private var project: WritingProject? { location.worldBuilding?.project }
 
@@ -205,7 +205,10 @@ struct WorldBuildingLocationCardView: View {
                     .frame(height: 190)
 
                     HStack(alignment: .bottom, spacing: 16) {
-                        WorldLocationPhotoView(photoData: location.photoData)
+                        PhotosPicker(selection: $photoItem, matching: .images) {
+                            WorldLocationPhotoView(photoData: location.photoData)
+                        }
+                        .buttonStyle(.plain)
 
                         VStack(alignment: .leading, spacing: 8) {
                             TextField("Название локации", text: $location.name)
@@ -258,10 +261,30 @@ struct WorldBuildingLocationCardView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        Label(title: { Text("Выбрать из Фото") }, icon: { Image(systemName: "photo.on.rectangle") })
+                    }
+
+                    Button {
+                        openImageFromFinder { data in location.photoData = data }
+                    } label: {
+                        Label(title: { Text("Выбрать файл...") }, icon: { Image(systemName: "folder") })
+                    }
+
+                    if location.photoData != nil {
+                        Button(role: .destructive) {
+                            location.photoData = nil
+                        } label: {
+                            Label(title: { Text("Удалить фото") }, icon: { Image(systemName: "photo.badge.minus") })
+                        }
+                    }
+
+                    Divider()
+
                     Button(role: .destructive) {
                         showDeleteAlert = true
                     } label: {
-                        Label("Удалить локацию", systemImage: "trash")
+                        Label(title: { Text("Удалить локацию") }, icon: { Image(systemName: "trash") })
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -276,9 +299,23 @@ struct WorldBuildingLocationCardView: View {
         } message: {
             Text("Это действие нельзя отменить.")
         }
+        .onChange(of: photoItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                    location.photoData = data
+                }
+            }
+        }
     }
 
     private func deleteLocation() {
+        let trash = TrashItem(
+            type: .location,
+            projectTitle: location.worldBuilding?.project?.title ?? "",
+            title: location.name.isEmpty ? "Без названия" : location.name,
+            snapshot: locationSnapshot(location)
+        )
+        modelContext.insert(trash)
         modelContext.delete(location)
         try? modelContext.save()
     }
@@ -304,9 +341,14 @@ private struct WorldLocationPhotoView: View {
                     .frame(width: 140, height: 140)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             } else {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 30))
-                    .foregroundStyle(Color("AccentColor").opacity(0.7))
+                VStack(spacing: 6) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Color("AccentColor").opacity(0.7))
+                    Text("Добавить фото")
+                        .font(.caption2)
+                        .foregroundStyle(Color("AccentColor").opacity(0.5))
+                }
             }
         }
     }
@@ -332,18 +374,174 @@ private struct WorldLocationChaptersTab: View {
     }
 }
 
-private struct WorldLocationTimelineTab: View {
+// MARK: - Events Tab (Timeline Nodes)
+
+private struct WorldLocationEventsTab: View {
     @Bindable var location: WorldLocation
+
+    private var project: WritingProject? { location.worldBuilding?.project }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                WorldLocationTimelineSection(location: location)
+                WorldLocationEventsSection(location: location, project: project)
                     .padding(24)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("PrimaryAccent"))
+    }
+}
+
+private struct WorldLocationEventsSection: View {
+    @Bindable var location: WorldLocation
+    var project: WritingProject?
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var showPicker = false
+
+    /// Все узлы всех треков проекта, связанные с этой локацией
+    private var linkedNodes: [(track: TimelineTrack, node: TimelineNode)] {
+        guard let project else { return [] }
+        return (project.timelineTracks ?? []).flatMap { track in
+            track.nodes
+                .filter { $0.locationIDs.contains(location.id) }
+                .map { (track, $0) }
+        }
+    }
+
+    /// Все узлы всех треков, ещё не связанные с этой локацией
+    private var availableNodes: [(track: TimelineTrack, node: TimelineNode)] {
+        guard let project else { return [] }
+        return (project.timelineTracks ?? []).flatMap { track in
+            track.nodes
+                .filter { !$0.locationIDs.contains(location.id) }
+                .map { (track, $0) }
+        }
+    }
+
+    var body: some View {
+        CardSection(icon: "calendar.day.timeline.left", title: "События") {
+            VStack(alignment: .leading, spacing: 8) {
+                if linkedNodes.isEmpty {
+                    Text("Событий не добавлено")
+                        .font(.subheadline)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                } else {
+                    ForEach(linkedNodes, id: \.node.id) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: item.node.eventType == .range ? "arrow.left.and.right" : "smallcircle.filled.circle")
+                                .foregroundStyle(Color("AccentColor"))
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.node.title.isEmpty ? "Без названия" : item.node.title)
+                                    .font(.subheadline)
+                                Text(item.track.title.isEmpty ? "Без названия" : item.track.title)
+                                    .font(.caption)
+                                    .foregroundStyle(Color("SecondaryText"))
+                            }
+                            Spacer()
+                            Button {
+                                unlinkNode(trackID: item.track.id, nodeID: item.node.id)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color("SecondaryText"))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+
+                Button {
+                    showPicker = true
+                } label: {
+                    Label(title: { Text("Добавить событие") }, icon: { Image(systemName: "plus.circle") })
+                        .font(.subheadline)
+                        .foregroundStyle(Color("AccentColor"))
+                }
+                .buttonStyle(.plain)
+                .disabled(availableNodes.isEmpty)
+                .popover(isPresented: $showPicker, arrowEdge: .bottom) {
+                    WorldLocationNodePickerPopover(items: availableNodes) { track, node in
+                        linkNode(trackID: track.id, nodeID: node.id)
+                        showPicker = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func linkNode(trackID: UUID, nodeID: UUID) {
+        guard let track = (project?.timelineTracks ?? []).first(where: { $0.id == trackID }) else { return }
+        var nodes = track.nodes
+        guard let idx = nodes.firstIndex(where: { $0.id == nodeID }) else { return }
+        if !nodes[idx].locationIDs.contains(location.id) {
+            nodes[idx].locationIDs.append(location.id)
+            track.nodes = nodes
+            try? modelContext.save()
+        }
+    }
+
+    private func unlinkNode(trackID: UUID, nodeID: UUID) {
+        guard let track = (project?.timelineTracks ?? []).first(where: { $0.id == trackID }) else { return }
+        var nodes = track.nodes
+        guard let idx = nodes.firstIndex(where: { $0.id == nodeID }) else { return }
+        nodes[idx].locationIDs.removeAll { $0 == location.id }
+        track.nodes = nodes
+        try? modelContext.save()
+    }
+}
+
+private struct WorldLocationNodePickerPopover: View {
+    var items: [(track: TimelineTrack, node: TimelineNode)]
+    var onSelect: (TimelineTrack, TimelineNode) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Выберите событие")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(items, id: \.node.id) { item in
+                        Button {
+                            onSelect(item.track, item.node)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: item.node.eventType == .range ? "arrow.left.and.right" : "smallcircle.filled.circle")
+                                    .foregroundStyle(Color("AccentColor"))
+                                    .frame(width: 16)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.node.title.isEmpty ? "Без названия" : item.node.title)
+                                        .foregroundStyle(Color("PrimaryText"))
+                                    Text(item.track.title.isEmpty ? "Без названия" : item.track.title)
+                                        .font(.caption)
+                                        .foregroundStyle(Color("SecondaryText"))
+                                }
+                                Spacer()
+                                Image(systemName: "plus")
+                                    .foregroundStyle(Color("AccentColor"))
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                    }
+                }
+            }
+            .frame(maxHeight: 280)
+        }
+        .frame(minWidth: 280)
         .background(Color("PrimaryAccent"))
     }
 }
@@ -409,6 +607,9 @@ private struct WorldLocationParentSection: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10)
+                    .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                 } else {
                     Text("Не выбрано")
                         .foregroundStyle(Color("SecondaryText"))
@@ -417,9 +618,11 @@ private struct WorldLocationParentSection: View {
                 Button {
                     showPicker = true
                 } label: {
-                    Label("Добавить локацию", systemImage: "plus")
+                    Label(title: { Text("Добавить локацию") }, icon: { Image(systemName: "plus.circle") })
+                        .font(.subheadline)
                         .foregroundStyle(Color("AccentColor"))
                 }
+                .buttonStyle(.plain)
                 .popover(isPresented: $showPicker) {
                     WorldLocationPickerPopover(
                         title: "Выберите надлокацию",
@@ -500,15 +703,20 @@ private struct WorldLocationSublocationsSection: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
 
                 Button {
                     showPicker = true
                 } label: {
-                    Label("Добавить локацию", systemImage: "plus")
+                    Label(title: { Text("Добавить локацию") }, icon: { Image(systemName: "plus.circle") })
+                        .font(.subheadline)
                         .foregroundStyle(Color("AccentColor"))
                 }
+                .buttonStyle(.plain)
                 .popover(isPresented: $showPicker) {
                     WorldLocationPickerPopover(
                         title: "Выберите подлокацию",
@@ -577,6 +785,35 @@ private struct WorldLocationPickerPopover: View {
             .frame(maxHeight: 320)
         }
         .frame(minWidth: 260)
+        .background(Color("PrimaryAccent"))
+    }
+}
+
+// MARK: - Trash Snapshot
+
+private func locationSnapshot(_ loc: WorldLocation) -> String {
+    var lines: [String] = []
+    lines.append("Название: \(loc.name)")
+    if !loc.type.isEmpty             { lines.append("Тип: \(loc.type)") }
+    if !loc.shortDescription.isEmpty { lines.append("\n— Описание —\n\(loc.shortDescription)") }
+    if !loc.atmosphere.isEmpty       { lines.append("\n— Атмосфера —\n\(loc.atmosphere)") }
+    if !loc.geography.isEmpty        { lines.append("\n— География —\n\(loc.geography)") }
+    if !loc.info.isEmpty             { lines.append("\n— Информация —\n\(loc.info)") }
+    if !loc.artifacts.isEmpty        { lines.append("\n— Артефакты —\n\(loc.artifacts)") }
+    if !loc.organizations.isEmpty    { lines.append("\n— Организации —\n\(loc.organizations)") }
+    if !loc.events.isEmpty           { lines.append("\n— События —\n\(loc.events)") }
+    return lines.joined(separator: "\n")
+}
+
+private func openImageFromFinder(onSelect: @escaping (Data) -> Void) {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.jpeg, .png, .heic, .tiff, .bmp, .gif, .webP]
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.begin { response in
+        guard response == .OK, let url = panel.url,
+              let data = try? Data(contentsOf: url) else { return }
+        onSelect(data)
     }
 }
 
@@ -587,8 +824,8 @@ private struct WorldLocationChaptersSection: View {
 
     private var availableChapters: [Chapter] {
         guard let project else { return [] }
-        let linked = Set(location.chapters.map { $0.id })
-        return project.chapters
+        let linked = Set((location.chapters ?? []).map { $0.id })
+        return (project.chapters ?? [])
             .filter { !linked.contains($0.id) }
             .sorted { $0.orderIndex < $1.orderIndex }
     }
@@ -596,32 +833,34 @@ private struct WorldLocationChaptersSection: View {
     var body: some View {
         CardSection(icon: "doc.text", title: "Главы") {
             VStack(alignment: .leading, spacing: 8) {
-                if location.chapters.isEmpty {
+                if (location.chapters ?? []).isEmpty {
                     Text("Глав не добавлено")
                         .font(.subheadline)
                         .foregroundStyle(Color("SecondaryText").opacity(0.6))
                 } else {
-                    ForEach(location.chapters.sorted { $0.orderIndex < $1.orderIndex }, id: \.id) { chapter in
+                    ForEach((location.chapters ?? []).sorted { $0.orderIndex < $1.orderIndex }, id: \.id) { chapter in
                         HStack {
                             Text(chapter.title.isEmpty ? "Без названия" : chapter.title)
                                 .font(.subheadline)
                             Spacer()
                             Button {
-                                location.chapters.removeAll { $0.id == chapter.id }
+                                location.chapters?.removeAll { $0.id == chapter.id }
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(Color("SecondaryText"))
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
 
                 Button {
                     showPicker = true
                 } label: {
-                    Label("Добавить главу", systemImage: "plus.circle")
+                    Label(title: { Text("Добавить главу") }, icon: { Image(systemName: "plus.circle") })
                         .font(.subheadline)
                         .foregroundStyle(Color("AccentColor"))
                 }
@@ -629,7 +868,7 @@ private struct WorldLocationChaptersSection: View {
                 .disabled(availableChapters.isEmpty)
                 .popover(isPresented: $showPicker, arrowEdge: .bottom) {
                     WorldLocationChapterPickerPopover(chapters: availableChapters) { chapter in
-                        location.chapters.append(chapter)
+                        location.chapters = (location.chapters ?? []) + [chapter]
                         showPicker = false
                     }
                 }
@@ -676,6 +915,7 @@ private struct WorldLocationChapterPickerPopover: View {
             .frame(maxHeight: 280)
         }
         .frame(minWidth: 260)
+        .background(Color("PrimaryAccent"))
     }
 }
 
@@ -686,8 +926,8 @@ private struct WorldLocationCharactersSection: View {
 
     private var availableCharacters: [Character] {
         guard let project else { return [] }
-        let linked = Set(location.characters.map { $0.id })
-        return project.characters
+        let linked = Set((location.characters ?? []).map { $0.id })
+        return (project.characters ?? [])
             .filter { !linked.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -695,32 +935,35 @@ private struct WorldLocationCharactersSection: View {
     var body: some View {
         CardSection(icon: "person.2", title: "Персонажи") {
             VStack(alignment: .leading, spacing: 8) {
-                if location.characters.isEmpty {
+                if (location.characters ?? []).isEmpty {
                     Text("Персонажей не добавлено")
                         .font(.subheadline)
                         .foregroundStyle(Color("SecondaryText").opacity(0.6))
                 } else {
-                    ForEach(location.characters, id: \.id) { character in
+                    ForEach(location.characters ?? [], id: \.id) { character in
                         HStack {
                             Text(character.name)
                                 .font(.subheadline)
                             Spacer()
                             Button {
-                                location.characters.removeAll { $0.id == character.id }
+                                location.characters?.removeAll { $0.id == character.id }
+                                character.worldLocations?.removeAll { $0.id == location.id }
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(Color("SecondaryText"))
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
 
                 Button {
                     showPicker = true
                 } label: {
-                    Label("Добавить персонажа", systemImage: "plus.circle")
+                    Label(title: { Text("Добавить персонажа") }, icon: { Image(systemName: "plus.circle") })
                         .font(.subheadline)
                         .foregroundStyle(Color("AccentColor"))
                 }
@@ -728,7 +971,10 @@ private struct WorldLocationCharactersSection: View {
                 .disabled(availableCharacters.isEmpty)
                 .popover(isPresented: $showPicker, arrowEdge: .bottom) {
                     WorldLocationCharacterPickerPopover(characters: availableCharacters) { character in
-                        location.characters.append(character)
+                        location.characters = (location.characters ?? []) + [character]
+                        if !(character.worldLocations ?? []).contains(where: { $0.id == location.id }) {
+                            character.worldLocations = (character.worldLocations ?? []) + [location]
+                        }
                         showPicker = false
                     }
                 }
@@ -775,86 +1021,7 @@ private struct WorldLocationCharacterPickerPopover: View {
             .frame(maxHeight: 280)
         }
         .frame(minWidth: 260)
-    }
-}
-
-private struct WorldLocationTimelineSection: View {
-    @Bindable var location: WorldLocation
-    @Environment(\.modelContext) private var modelContext
-
-    @State private var showAddAlert = false
-    @State private var newTitle = ""
-    @State private var newDate = ""
-
-    private var sorted: [TimelineEvent] {
-        location.timeline.sorted { $0.orderIndex < $1.orderIndex }
-    }
-
-    var body: some View {
-        CardSection(icon: "calendar.day.timeline.left", title: "Таймлайн") {
-            VStack(alignment: .leading, spacing: 8) {
-                if sorted.isEmpty {
-                    Text("Событий нет")
-                        .font(.subheadline)
-                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
-                } else {
-                    ForEach(sorted, id: \.id) { event in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: event.type.icon)
-                                .foregroundStyle(Color("AccentColor"))
-                                .frame(width: 16)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(event.title)
-                                    .font(.subheadline)
-                                if !event.date.isEmpty {
-                                    Text(event.date)
-                                        .font(.caption)
-                                        .foregroundStyle(Color("SecondaryText"))
-                                }
-                            }
-                            Spacer()
-                            Button {
-                                location.timeline.removeAll { $0.id == event.id }
-                                modelContext.delete(event)
-                                try? modelContext.save()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(Color("SecondaryText"))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-
-                Button {
-                    showAddAlert = true
-                } label: {
-                    Label("Добавить событие", systemImage: "plus.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(Color("AccentColor"))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .alert("Новое событие", isPresented: $showAddAlert) {
-            TextField("Название", text: $newTitle)
-            TextField("Дата (необязательно)", text: $newDate)
-            Button("Добавить") { addEvent() }
-            Button("Отмена", role: .cancel) { }
-        }
-    }
-
-    private func addEvent() {
-        let t = newTitle.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return }
-        let event = TimelineEvent(title: t, date: newDate.trimmingCharacters(in: .whitespaces))
-        event.orderIndex = location.timeline.count
-        location.timeline.append(event)
-        modelContext.insert(event)
-        try? modelContext.save()
-        newTitle = ""
-        newDate = ""
+        .background(Color("PrimaryAccent"))
     }
 }
 
@@ -865,7 +1032,7 @@ private struct WorldLocationHierarchySection: View {
     @State private var showParentPicker = false
 
     private var allLocations: [WorldLocation] {
-        world?.locations.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } ?? []
+        (world?.locations ?? []).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private var parentLocation: WorldLocation? {
@@ -918,7 +1085,7 @@ private struct WorldLocationHierarchySection: View {
                     Button {
                         showParentPicker = true
                     } label: {
-                        Label("Выбрать надлокацию", systemImage: "plus.circle")
+                        Label(title: { Text("Выбрать надлокацию") }, icon: { Image(systemName: "plus.circle") })
                             .font(.subheadline)
                             .foregroundStyle(Color("AccentColor"))
                     }
@@ -965,7 +1132,7 @@ private struct WorldLocationHierarchySection: View {
                     Button {
                         showSubPicker = true
                     } label: {
-                        Label("Добавить подлокацию", systemImage: "plus.circle")
+                        Label(title: { Text("Добавить подлокацию") }, icon: { Image(systemName: "plus.circle") })
                             .font(.subheadline)
                             .foregroundStyle(Color("AccentColor"))
                     }
@@ -1021,6 +1188,7 @@ private struct WorldLocationSubPickerPopover: View {
             .frame(maxHeight: 280)
         }
         .frame(minWidth: 260)
+        .background(Color("PrimaryAccent"))
     }
 }
 
@@ -1062,5 +1230,6 @@ private struct WorldLocationParentPickerPopover: View {
             .frame(maxHeight: 280)
         }
         .frame(minWidth: 260)
+        .background(Color("PrimaryAccent"))
     }
 }

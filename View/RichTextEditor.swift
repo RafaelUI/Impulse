@@ -65,7 +65,7 @@ struct RichTextEditor: NSViewRepresentable {
         // Update font when settings change
         let currentFont = textView.font
         let targetSize = fontSize
-        if currentFont?.pointSize != targetSize {
+        if currentFont?.pointSize != CGFloat(targetSize) {
             applyFont(to: textView)
         }
 
@@ -166,26 +166,80 @@ struct RichTextEditor: NSViewRepresentable {
     }
 }
 
-// MARK: - Heading / Subheading helpers (called from menu)
+// MARK: - Text formatting helpers (called from Format menu)
 
 extension NSTextView {
 
-    /// Applies a heading style to the current selection (or paragraph if empty selection)
+    /// Заголовок — Georgia 22pt Bold
     func applyHeading() {
-        applyParagraphStyle(fontSize: 26, bold: true)
+        applyParagraphFont(size: 22, bold: true)
     }
 
-    /// Applies a subheading style to the current selection
+    /// Подзаголовок — Georgia 17pt Bold
     func applySubheading() {
-        applyParagraphStyle(fontSize: 20, bold: true)
+        applyParagraphFont(size: 17, bold: true)
     }
 
-    private func applyParagraphStyle(fontSize: CGFloat, bold: Bool) {
+    /// Курсив — переключает italic на выделении (или на слове под курсором)
+    func applyItalic() {
         guard let storage = textStorage else { return }
-        let range = effectiveRange()
+        let range = effectiveSelectionRange()
+        guard range.length > 0 else { return }
 
-        let baseFont = NSFont(name: "Georgia", size: fontSize)
-            ?? NSFont.systemFont(ofSize: fontSize)
+        // Определяем: весь ли диапазон уже italic
+        var allItalic = true
+        storage.enumerateAttribute(.font, in: range) { val, _, stop in
+            guard let font = val as? NSFont else { allItalic = false; stop.pointee = true; return }
+            if !font.fontDescriptor.symbolicTraits.contains(.italic) {
+                allItalic = false
+                stop.pointee = true
+            }
+        }
+
+        storage.beginEditing()
+        storage.enumerateAttribute(.font, in: range) { val, r, _ in
+            guard let font = val as? NSFont else { return }
+            let newFont = allItalic
+                ? NSFontManager.shared.convert(font, toNotHaveTrait: .italicFontMask)
+                : NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+            storage.addAttribute(.font, value: newFont, range: r)
+        }
+        storage.endEditing()
+        didChangeText()
+    }
+
+    /// Подчёркивание — переключает underline на выделении
+    func applyUnderline() {
+        guard let storage = textStorage else { return }
+        let range = effectiveSelectionRange()
+        guard range.length > 0 else { return }
+
+        // Определяем: весь ли диапазон уже подчёркнут
+        var allUnderlined = true
+        storage.enumerateAttribute(.underlineStyle, in: range) { val, _, stop in
+            let style = (val as? Int) ?? 0
+            if style == 0 { allUnderlined = false; stop.pointee = true }
+        }
+
+        let newStyle = allUnderlined ? 0 : NSUnderlineStyle.single.rawValue
+        storage.beginEditing()
+        if newStyle == 0 {
+            storage.removeAttribute(.underlineStyle, range: range)
+        } else {
+            storage.addAttribute(.underlineStyle, value: newStyle, range: range)
+        }
+        storage.endEditing()
+        didChangeText()
+    }
+
+    // MARK: Private helpers
+
+    private func applyParagraphFont(size: CGFloat, bold: Bool) {
+        guard let storage = textStorage else { return }
+        let range = effectiveParagraphRange()
+
+        let baseFont = NSFont(name: "Georgia", size: size)
+            ?? NSFont.systemFont(ofSize: size)
         let font = bold
             ? NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
             : baseFont
@@ -196,12 +250,16 @@ extension NSTextView {
         didChangeText()
     }
 
-    /// Range covering full paragraphs of the current selection
-    private func effectiveRange() -> NSRange {
+    /// Диапазон выделения (если есть) — для inline-стилей
+    private func effectiveSelectionRange() -> NSRange {
+        selectedRange()
+    }
+
+    /// Диапазон целых параграфов выделения — для блочных стилей (заголовки)
+    private func effectiveParagraphRange() -> NSRange {
         let sel = selectedRange()
         let str = string as NSString
         if sel.length > 0 { return str.paragraphRange(for: sel) }
-        // No selection — use paragraph under caret
         return str.paragraphRange(for: NSRange(location: sel.location, length: 0))
     }
 }

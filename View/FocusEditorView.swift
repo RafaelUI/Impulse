@@ -45,7 +45,7 @@ struct FocusChapterEditorView: View {
 
     @Environment(\.modelContext) private var modelContext
     @AppStorage("editorFontSize") private var fontSize: Double = 17
-    @AppStorage("editorFocusPadding") private var focusPadding: Double = 120
+    @AppStorage("editorFocusPadding") private var focusPadding: Double = 40
 
     @Query private var chapters: [Chapter]
     private var chapter: Chapter? { chapters.first { $0.id == chapterID } }
@@ -74,7 +74,7 @@ struct FocusChapterEditorView: View {
 
             // ── Редактор ──────────────────────────────────────────
             ZStack(alignment: .topLeading) {
-                if chapter.text.isEmpty {
+                if chapter.text.isEmpty && chapter.textData.isEmpty {
                     Text("Начните писать...")
                         .foregroundStyle(Color("SecondaryText").opacity(0.4))
                         .font(.system(size: fontSize, design: .serif))
@@ -82,12 +82,14 @@ struct FocusChapterEditorView: View {
                         .padding(.leading, focusPadding + 6)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: Bindable(chapter).text)
-                    .font(.system(size: fontSize, design: .serif))
-                    .padding(.horizontal, focusPadding)
-                    .scrollContentBackground(.hidden)
-                    .padding(.top, showControls ? 44 : 16)
-                    .animation(.easeInOut(duration: 0.2), value: showControls)
+                RichTextEditor(
+                    rtfData: Bindable(chapter).textData,
+                    plainText: Bindable(chapter).text,
+                    fontSize: fontSize,
+                    horizontalPadding: focusPadding,
+                    topPadding: showControls ? 44 : 16
+                )
+                .animation(.easeInOut(duration: 0.2), value: showControls)
             }
             .background(Color("Editor"))
 
@@ -100,24 +102,13 @@ struct FocusChapterEditorView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // ── Невидимая хот-зона (верхние 44px) ─────────────────
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active:
-                        withAnimation(.easeOut(duration: 0.15)) { showControls = true }
-                    case .ended:
-                        break
-                    }
-                }
-                .allowsHitTesting(!showControls)
         }
-        // Скрываем когда курсор покидает окно
         .onContinuousHover { phase in
-            if case .ended = phase {
+            switch phase {
+            case .active(let location):
+                let inTopZone = location.y < 44
+                withAnimation(.easeOut(duration: 0.15)) { showControls = inTopZone }
+            case .ended:
                 withAnimation(.easeIn(duration: 0.2)) { showControls = false }
             }
         }
@@ -163,7 +154,7 @@ struct FocusSceneEditorView: View {
 
     @Environment(\.modelContext) private var modelContext
     @AppStorage("editorFontSize") private var fontSize: Double = 17
-    @AppStorage("editorFocusPadding") private var focusPadding: Double = 120
+    @AppStorage("editorFocusPadding") private var focusPadding: Double = 40
 
     @Query private var scenes: [ScreenScene]
     private var scene: ScreenScene? { scenes.first { $0.id == sceneID } }
@@ -200,6 +191,18 @@ struct FocusSceneEditorView: View {
                 scene.variations = vars
             }
         )
+        let currentRTF = Binding<Data>(
+            get: {
+                guard activeIndex < scene.variations.count else { return Data() }
+                return scene.variations[activeIndex].textData
+            },
+            set: { newValue in
+                var vars = scene.variations
+                guard activeIndex < vars.count else { return }
+                vars[activeIndex].textData = newValue
+                scene.variations = vars
+            }
+        )
 
         // Высота панели: строка + вкладки вариаций
         let barHeight: CGFloat = 60
@@ -209,7 +212,7 @@ struct FocusSceneEditorView: View {
 
             // ── Редактор ──────────────────────────────────────────
             ZStack(alignment: .topLeading) {
-                if currentText.wrappedValue.isEmpty {
+                if currentText.wrappedValue.isEmpty && currentRTF.wrappedValue.isEmpty {
                     Text("Начните писать...")
                         .foregroundStyle(Color("SecondaryText").opacity(0.4))
                         .font(.system(size: fontSize, design: .serif))
@@ -217,12 +220,14 @@ struct FocusSceneEditorView: View {
                         .padding(.leading, focusPadding + 6)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: currentText)
-                    .font(.system(size: fontSize, design: .serif))
-                    .padding(.horizontal, focusPadding)
-                    .scrollContentBackground(.hidden)
-                    .padding(.top, showControls ? barHeight : 16)
-                    .animation(.easeInOut(duration: 0.2), value: showControls)
+                RichTextEditor(
+                    rtfData: currentRTF,
+                    plainText: currentText,
+                    fontSize: fontSize,
+                    horizontalPadding: focusPadding,
+                    topPadding: showControls ? barHeight : 16
+                )
+                .animation(.easeInOut(duration: 0.2), value: showControls)
             }
             .background(Color("Editor"))
 
@@ -241,24 +246,13 @@ struct FocusSceneEditorView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // ── Невидимая хот-зона (верхние 60px) ─────────────────
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: barHeight)
-                .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active:
-                        withAnimation(.easeOut(duration: 0.15)) { showControls = true }
-                    case .ended:
-                        break
-                    }
-                }
-                .allowsHitTesting(!showControls)
         }
-        // Скрываем когда курсор покидает окно
         .onContinuousHover { phase in
-            if case .ended = phase {
+            switch phase {
+            case .active(let location):
+                let inTopZone = location.y < barHeight
+                withAnimation(.easeOut(duration: 0.15)) { showControls = inTopZone }
+            case .ended:
                 withAnimation(.easeIn(duration: 0.2)) { showControls = false }
             }
         }

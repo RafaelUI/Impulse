@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import AuthenticationServices
 import AppKit
 
@@ -20,6 +21,7 @@ final class AppleSignInManager: NSObject, ObservableObject {
     @Published var signedInUser: SignedInUser? = nil
     @Published var isSignedIn: Bool = false
 
+    private var presentationContext: PresentationContextProvider?
     private let userIDKey = "appleSignIn.userID"
     private let fullNameKey = "appleSignIn.fullName"
     private let emailKey = "appleSignIn.email"
@@ -36,15 +38,16 @@ final class AppleSignInManager: NSObject, ObservableObject {
 
         let provider = ASAuthorizationAppleIDProvider()
         provider.getCredentialState(forUserID: savedID) { [weak self] state, _ in
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 switch state {
                 case .authorized:
-                    let name = UserDefaults.standard.string(forKey: self?.fullNameKey ?? "") ?? ""
-                    let email = UserDefaults.standard.string(forKey: self?.emailKey ?? "")
-                    self?.signedInUser = SignedInUser(userID: savedID, fullName: name, email: email)
-                    self?.isSignedIn = true
+                    let name = UserDefaults.standard.string(forKey: self.fullNameKey) ?? ""
+                    let email = UserDefaults.standard.string(forKey: self.emailKey)
+                    self.signedInUser = SignedInUser(userID: savedID, fullName: name, email: email)
+                    self.isSignedIn = true
                 case .revoked, .notFound:
-                    self?.clearSession()
+                    self.clearSession()
                 default:
                     break
                 }
@@ -59,15 +62,29 @@ final class AppleSignInManager: NSObject, ObservableObject {
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
 
+        let context = PresentationContextProvider(window: presentingWindow)
+        presentationContext = context
+
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
-        controller.presentationContextProvider = PresentationContextProvider(window: presentingWindow)
+        controller.presentationContextProvider = context
         controller.performRequests()
     }
 
     // MARK: - Выход
 
     func signOut() {
+        clearSession()
+    }
+
+    // MARK: - Удаление аккаунта (требование App Store Guideline 5.1.1)
+    //
+    // Полное отозвание токена требует серверного endpoint'а (Apple Token Revocation API).
+    // Для приложений без бэкенда достаточно очистить локальные данные — Apple также
+    // предоставляет пользователю возможность отозвать доступ через Настройки → Apple ID →
+    // Пароль и безопасность → Приложения, использующие Apple ID.
+
+    func deleteAccount() async {
         clearSession()
     }
 
@@ -123,7 +140,7 @@ extension AppleSignInManager: ASAuthorizationControllerDelegate {
         didCompleteWithError error: Error
     ) {
         // Пользователь отменил или произошла ошибка — ничего не делаем
-        print("Sign in with Apple error: \(error.localizedDescription)")
+        // Sign in with Apple failed (e.g. user cancelled or accounts mismatch)
     }
 }
 

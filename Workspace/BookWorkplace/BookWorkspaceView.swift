@@ -12,6 +12,8 @@ struct BookWorkspace: View {
     @State private var locationTabs: [UUID: WorldLocationTab] = [:]
     @State private var selectedTrack: TimelineTrack? = nil
 
+    @AppStorage("showChapterLabels") private var showLabels: Bool = false
+    @State private var showFilterPopover = false
     @Environment(\.dismiss) private var dismiss
 
     enum BookModule: String, CaseIterable, Identifiable {
@@ -35,9 +37,9 @@ struct BookWorkspace: View {
 
     var body: some View {
         NavigationSplitView {
-            List(BookModule.allCases.filter { $0 != .search }, selection: $selectedModule) { module in
+            List(BookModule.allCases, selection: $selectedModule) { module in
                 NavigationLink(value: module) {
-                    Label(module.rawValue, systemImage: module.icon)
+                    Label(title: { Text(LocalizedStringKey(module.rawValue)) }, icon: { Image(systemName: module.icon) })
                         .foregroundStyle(Color("PrimaryText"))
                 }
             }
@@ -48,6 +50,20 @@ struct BookWorkspace: View {
             if selectedModule == .timeline {
                 TimelineWorkspaceView(project: project, selectedTrack: $selectedTrack)
                     .navigationTitle("")
+            } else if selectedModule == .search {
+                ProjectSearchView(
+                    project: project,
+                    scope: .book,
+                    onChapterSelect: { chapter in
+                        selectedChapter = chapter
+                        selectedModule = .manuscript
+                    },
+                    onCharacterSelect: { character in
+                        selectedCharacter = character
+                        selectedModule = .characters
+                    }
+                )
+                .navigationTitle("")
             } else {
                 HStack(spacing: 0) {
                     // ── Средняя колонка (список) ─────────────────────────
@@ -78,7 +94,7 @@ struct BookWorkspace: View {
                            HStack(spacing: 2) {
                                ForEach(WorldLocationTab.allCases) { tab in
                                    let isActive = (locationTabs[location.id] ?? .info) == tab
-                                   Text(tab.rawValue)
+                                   Text(LocalizedStringKey(tab.rawValue))
                                        .font(.body)
                                        .foregroundStyle(isActive ? Color("AccentColor") : Color("PrimaryText"))
                                        .padding(.horizontal, 15)
@@ -103,10 +119,53 @@ struct BookWorkspace: View {
                    Button {
                        handleBack()
                    } label: {
-                       Image(systemName: "chevron.left")
-                           .foregroundStyle(Color("PrimaryText"))
+                       Image(systemName: "chevron.backward.circle")
+                           .foregroundStyle(Color("AccentColor"))
+                           .font(.system(size: 20))
                    }
                    .buttonStyle(AccentToolbarButtonStyle())
+               }
+
+               ToolbarItem(placement: .navigation) {
+                   Button {
+                       showLabels.toggle()
+                   } label: {
+                       ZStack {
+                           Circle()
+                               .fill(Color.white.opacity(0.001))
+                               .frame(width: 30, height: 30)
+                           Circle()
+                               .strokeBorder(showLabels ? Color("AccentColor") : Color("SecondaryText").opacity(0.4), lineWidth: 1.5)
+                               .frame(width: 20, height: 20)
+                           if showLabels {
+                               Image(systemName: "checkmark")
+                                   .font(.system(size: 10, weight: .bold))
+                                   .foregroundStyle(Color("AccentColor"))
+                           }
+                       }
+                   }
+                   .buttonStyle(.plain)
+                   .contentShape(Rectangle())
+                   .opacity(selectedModule == .manuscript ? 1 : 0)
+                   .disabled(selectedModule != .manuscript)
+               }
+
+               ToolbarItem(placement: .navigation) {
+                   Button {
+                       showFilterPopover = true
+                   } label: {
+                       Image(systemName: "chevron.down")
+                           .font(.system(size: 11, weight: .semibold))
+                           .foregroundStyle(ChapterListFilter.isActive ? Color("AccentColor") : Color("SecondaryText").opacity(0.6))
+                           .frame(width: 20, height: 20)
+                           .contentShape(Rectangle())
+                   }
+                   .buttonStyle(.plain)
+                   .popover(isPresented: $showFilterPopover, arrowEdge: .bottom) {
+                       ChapterFilterPopover()
+                   }
+                   .opacity(selectedModule == .manuscript ? 1 : 0)
+                   .disabled(selectedModule != .manuscript)
                }
 
                ToolbarItem(placement: .automatic) {
@@ -137,18 +196,6 @@ struct BookWorkspace: View {
             ChapterListView(project: project, selectedChapter: $selectedChapter)
         case .worldBuilding:
             WorldBuildingLocationListView(project: project, selectedLocation: $selectedLocation)
-        case .search:
-            SearchView(
-                project: project,
-                onChapterSelect: { chapter in
-                    selectedChapter = chapter
-                    selectedModule = .manuscript
-                },
-                onCharacterSelect: { character in
-                    selectedCharacter = character
-                    selectedModule = .characters
-                }
-            )
         default:
             ZStack {
                 Color("PrimaryAccent").ignoresSafeArea()
@@ -199,7 +246,7 @@ struct BookWorkspace: View {
     }
 
     @ViewBuilder
-    private func placeholderView(icon: String, text: String) -> some View {
+    private func placeholderView(icon: String, text: LocalizedStringKey) -> some View {
         ZStack {
             Color("PrimaryAccent").ignoresSafeArea()
             VStack(spacing: 8) {

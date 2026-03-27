@@ -14,27 +14,26 @@ import SwiftUI
 struct SearchScope {
     var allowKeywordTypes: Set<SearchResultType>    // Типы для быстрого поиска по словам
     var allowSemanticChapters: Bool                  // Включать ли глубокий семантический поиск по тексту глав
+    var allowSemanticScenes: Bool                    // Включать ли семантический поиск по сценам
 
     // Готовые пресеты для разных воркспейсов
     static let book = SearchScope(
         allowKeywordTypes: [.chapter, .character, .worldResource,
-                            .worldConcept, .worldStructure, .metaphysics, .timeline],
-        allowSemanticChapters: true
+                            .worldConcept, .worldStructure, .metaphysics],
+        allowSemanticChapters: true,
+        allowSemanticScenes: false
     )
 
     static let screenplay = SearchScope(
-        allowKeywordTypes: [.chapter, .character],
-        allowSemanticChapters: true
+        allowKeywordTypes: [.scene, .screenRole],
+        allowSemanticChapters: false,
+        allowSemanticScenes: true
     )
 
     static let novel = SearchScope(
         allowKeywordTypes: [.chapter, .character],
-        allowSemanticChapters: true
-    )
-
-    static let science = SearchScope(
-        allowKeywordTypes: [.worldResource, .worldConcept, .worldStructure, .metaphysics],
-        allowSemanticChapters: false
+        allowSemanticChapters: true,
+        allowSemanticScenes: false
     )
 }
 
@@ -45,6 +44,8 @@ struct ProjectSearchView: View {
     let scope: SearchScope
     var onChapterSelect: (Chapter) -> Void = { _ in }
     var onCharacterSelect: (Character) -> Void = { _ in }
+    var onSceneSelect: (ScreenScene) -> Void = { _ in }
+    var onScreenRoleSelect: (ScreenRole) -> Void = { _ in }
 
     @ObservedObject private var service = EmbeddingService.shared
 
@@ -62,9 +63,9 @@ struct ProjectSearchView: View {
 
     // UI state
     @State private var hasSearched = false
-    @State private var showEmpty = false        // задержка перед "ничего не найдено"
+    @State private var showEmpty = false
     @State private var emptyDelayTask: Task<Void, Never>? = nil
-    @State private var visibleResults: [SearchResult] = []  // для анимации по одному
+    @Namespace private var searchNS
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
@@ -72,125 +73,113 @@ struct ProjectSearchView: View {
             ZStack(alignment: .top) {
                 Color("PrimaryAccent").ignoresSafeArea()
 
-                // ── Иконка и подсказка — исчезают при поиске ───────────
-                if !hasSearched {
-                    VStack(spacing: 12) {
-                        Image(systemName: "sparkle.magnifyingglass")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color("AccentColor").opacity(0.4))
-                        Text("Поиск по проекту")
-                            .font(.title2.weight(.medium))
-                            .foregroundStyle(Color("PrimaryText"))
-                        searchBar
-                            .frame(maxWidth: 520)
-                            .padding(.top, 8)
-                        Text("Поиск по словам — мгновенно\nСемантический поиск по тексту глав — глубоко")
-                            .font(.caption)
-                            .foregroundStyle(Color("SecondaryText").opacity(0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 4)
-                    }
-                    .padding(.horizontal, 32)
-                    .frame(maxWidth: .infinity)
-                    // Центрируем вертикально
-                    .offset(y: geo.size.height / 2 - 130)
-                    .transition(.opacity)
+                // ── Декор — исчезает по opacity, не перестраивает дерево ──
+                VStack(spacing: 10) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .font(.system(size: 40))
+                        .foregroundStyle(Color("AccentColor").opacity(0.4))
+                    Text("Поиск по проекту")
+                        .font(.title2.weight(.medium))
+                        .foregroundStyle(Color("PrimaryText"))
                 }
+                .frame(maxWidth: .infinity)
+                // Центрируем выше строки поиска: строка на height/2 - 90, декор — ещё на 100 выше
+                .offset(y: geo.size.height / 2 - 190)
+                .opacity(hasSearched ? 0 : 1)
+                .allowsHitTesting(!hasSearched)
 
-                // ── Строка поиска в режиме результатов ─────────────────
-                if hasSearched {
-                    VStack(spacing: 0) {
-                        searchBar
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 8)
+                Text("Поиск по словам — мгновенно\nСемантический поиск по тексту глав — глубоко")
+                    .font(.caption)
+                    .foregroundStyle(Color("SecondaryText").opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .offset(y: geo.size.height / 2 - 30)
+                    .opacity(hasSearched ? 0 : 1)
+                    .allowsHitTesting(false)
 
-                        Divider()
+                // ── Результаты — всегда в дереве, показываются по opacity ──
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: 56)
+                    Divider()
 
-                        // ── Результаты ─────────────────────────────────
-                        if showEmpty && keywordResults.isEmpty && semanticResults.isEmpty && !isSemanticRunning {
-                            ContentUnavailableView(
-                                "Ничего не найдено",
-                                systemImage: "doc.text.magnifyingglass",
-                                description: Text("Попробуйте другую формулировку")
-                            )
-                            .transition(.opacity)
-                        } else {
-                            ScrollView {
-                                LazyVStack(spacing: 0) {
-
-                                    // ── По словам ──────────────────────
-                                    if !keywordResults.isEmpty {
-                                        sectionHeader(
-                                            icon: "textformat.abc",
-                                            title: "По словам",
-                                            count: keywordResults.count
-                                        )
-                                        ForEach(keywordResults) { result in
+                    if showEmpty && keywordResults.isEmpty && semanticResults.isEmpty && !isSemanticRunning {
+                        ContentUnavailableView(
+                            "Ничего не найдено",
+                            systemImage: "doc.text.magnifyingglass",
+                            description: Text("Попробуйте другую формулировку")
+                        )
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                if !keywordResults.isEmpty {
+                                    sectionHeader(icon: "textformat.abc", title: "По словам", count: keywordResults.count)
+                                    ForEach(keywordResults) { result in
+                                        SearchResultRow(result: result) { handleSelect(result) }
+                                            .transition(.asymmetric(
+                                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                                removal: .opacity
+                                            ))
+                                        if result.id != keywordResults.last?.id {
+                                            Divider().padding(.leading, 60)
+                                        }
+                                    }
+                                    Divider().padding(.top, 4)
+                                }
+                                if scope.allowSemanticChapters || scope.allowSemanticScenes {
+                                    sectionHeader(
+                                        icon: "sparkles",
+                                        title: "По смыслу",
+                                        count: semanticResults.count,
+                                        isLoading: isSemanticRunning,
+                                        progress: semanticProgress,
+                                        total: semanticTotal
+                                    )
+                                    if semanticResults.isEmpty && isSemanticRunning {
+                                        HStack {
+                                            Spacer()
+                                            Text(scope.allowSemanticScenes ? "Анализируем текст сцен..." : "Анализируем текст глав...")
+                                                .font(.caption)
+                                                .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                                            Spacer()
+                                        }
+                                        .padding(.vertical, 16)
+                                    } else {
+                                        ForEach(semanticResults) { result in
                                             SearchResultRow(result: result) { handleSelect(result) }
                                                 .transition(.asymmetric(
                                                     insertion: .move(edge: .bottom).combined(with: .opacity),
                                                     removal: .opacity
                                                 ))
-                                            if result.id != keywordResults.last?.id {
+                                            if result.id != semanticResults.last?.id {
                                                 Divider().padding(.leading, 60)
-                                            }
-                                        }
-                                        Divider().padding(.top, 4)
-                                    }
-
-                                    // ── По смыслу ──────────────────────
-                                    if scope.allowSemanticChapters {
-                                        sectionHeader(
-                                            icon: "sparkles",
-                                            title: "По смыслу",
-                                            count: semanticResults.count,
-                                            isLoading: isSemanticRunning,
-                                            progress: semanticProgress,
-                                            total: semanticTotal
-                                        )
-                                        if semanticResults.isEmpty && isSemanticRunning {
-                                            HStack {
-                                                Spacer()
-                                                Text("Анализируем текст глав...")
-                                                    .font(.caption)
-                                                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
-                                                Spacer()
-                                            }
-                                            .padding(.vertical, 16)
-                                        } else {
-                                            ForEach(semanticResults) { result in
-                                                SearchResultRow(result: result) { handleSelect(result) }
-                                                    .transition(.asymmetric(
-                                                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                                                        removal: .opacity
-                                                    ))
-                                                if result.id != semanticResults.last?.id {
-                                                    Divider().padding(.leading, 60)
-                                                }
                                             }
                                         }
                                     }
                                 }
-                                .padding(.vertical, 8)
-                                .animation(.spring(duration: 1.8, bounce: 0.15), value: keywordResults.map(\.id))
-                                .animation(.spring(duration: 1.8, bounce: 0.15), value: semanticResults.map(\.id))
                             }
+                            .padding(.vertical, 8)
+                            .animation(.spring(duration: 1.0, bounce: 0.15), value: keywordResults.map(\.id))
+                            .animation(.spring(duration: 1.0, bounce: 0.15), value: semanticResults.map(\.id))
                         }
                     }
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity
-                    ))
                 }
+                .opacity(hasSearched ? 1 : 0)
+                .allowsHitTesting(hasSearched)
+
+                // ── Строка поиска — ОДИН экземпляр, двигается через padding ──
+                searchFieldView
+                    .matchedGeometryEffect(id: "searchBar", in: searchNS)
+                    .frame(maxWidth: hasSearched ? .infinity : 520)
+                    .padding(.horizontal, 16)
+                    .padding(.top, hasSearched ? 10 : geo.size.height / 2 - 90)
             }
+            .animation(.spring(duration: 1.3, bounce: 0.08), value: hasSearched)
         }
         .background(Color("PrimaryAccent"))
-        .animation(.spring(duration: 0.45, bounce: 0.1), value: hasSearched)
     }
 
-    // ── Строка поиска — единственный экземпляр в body ──────────────────
-    private var searchBar: some View {
+    // ── TextField — единственный экземпляр во всём view ────────────────
+    private var searchFieldView: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(isSearchFocused ? Color("AccentColor") : Color("SecondaryText"))
@@ -209,9 +198,7 @@ struct ProjectSearchView: View {
                     .controlSize(.small)
                     .help("Семантический поиск: \(semanticProgress)/\(semanticTotal) глав")
             } else if !query.isEmpty {
-                Button {
-                    clearSearch()
-                } label: {
+                Button { clearSearch() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Color("SecondaryText").opacity(0.6))
                 }
@@ -279,12 +266,12 @@ struct ProjectSearchView: View {
 
         // Keyword — дебаунс 150ms, результаты сразу
         keywordTask = Task {
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
             let found = service.keywordSearch(query: trimmed, in: project)
                 .filter { scope.allowKeywordTypes.contains($0.type) }
             await MainActor.run {
-                withAnimation(.spring(duration: 2, bounce: 0.15)) {
+                withAnimation(.spring(duration: 1.8, bounce: 0.15)) {
                     keywordResults = found
                     hasSearched = true
                 }
@@ -292,17 +279,17 @@ struct ProjectSearchView: View {
         }
 
         // Semantic — после 400ms паузы
-        if scope.allowSemanticChapters {
+        if scope.allowSemanticChapters || scope.allowSemanticScenes {
             semanticTask = Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(400))
                 guard !Task.isCancelled else { return }
                 await runSemanticSearch(query: trimmed)
             }
         }
 
-        // "Ничего не найдено" — только через 2 секунды после последнего ввода
+        // "Ничего не найдено" — только через 2 секунды
         emptyDelayTask = Task {
-            try? await Task.sleep(for: .seconds(3.2))
+            try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -319,27 +306,48 @@ struct ProjectSearchView: View {
     }
 
     private func runSemanticSearch(query: String) async {
-        let chapters = project.chapters
-        guard !chapters.isEmpty else { return }
+        if scope.allowSemanticScenes {
+            let scenes = project.scenes ?? []
+            guard !scenes.isEmpty else { return }
 
-        await MainActor.run {
-            semanticResults = []
-            isSemanticRunning = true
-            semanticProgress = 0
-            semanticTotal = chapters.count
-        }
+            await MainActor.run {
+                semanticResults = []
+                isSemanticRunning = true
+                semanticProgress = 0
+                semanticTotal = scenes.count
+            }
 
-        await service.semanticChapterSearch(
-            query: query,
-            chapters: chapters
-        ) { result in
-            // onResult вызывается на том потоке, где работает EmbeddingService (@MainActor)
-            // Вставляем результат в отсортированное место
-            var updated = semanticResults
-            updated.append(result)
-            updated.sort { $0.score > $1.score }
-            semanticResults = updated
-            semanticProgress += 1
+            await service.semanticSceneSearch(
+                query: query,
+                scenes: scenes
+            ) { result in
+                var updated = semanticResults
+                updated.append(result)
+                updated.sort { $0.score > $1.score }
+                semanticResults = updated
+                semanticProgress += 1
+            }
+        } else if scope.allowSemanticChapters {
+            let chapters = project.chapters ?? []
+            guard !chapters.isEmpty else { return }
+
+            await MainActor.run {
+                semanticResults = []
+                isSemanticRunning = true
+                semanticProgress = 0
+                semanticTotal = chapters.count
+            }
+
+            await service.semanticChapterSearch(
+                query: query,
+                chapters: chapters
+            ) { result in
+                var updated = semanticResults
+                updated.append(result)
+                updated.sort { $0.score > $1.score }
+                semanticResults = updated
+                semanticProgress += 1
+            }
         }
 
         await MainActor.run {
@@ -360,7 +368,9 @@ struct ProjectSearchView: View {
     }
 
     private func handleSelect(_ result: SearchResult) {
-        if let chapter   = result.chapter   { onChapterSelect(chapter) }
-        if let character = result.character { onCharacterSelect(character) }
+        if let chapter    = result.chapter    { onChapterSelect(chapter) }
+        if let character  = result.character  { onCharacterSelect(character) }
+        if let scene      = result.scene      { onSceneSelect(scene) }
+        if let screenRole = result.screenRole { onScreenRoleSelect(screenRole) }
     }
 }

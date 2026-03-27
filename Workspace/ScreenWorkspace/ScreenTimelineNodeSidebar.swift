@@ -117,8 +117,8 @@ struct ScreenTimelineNodeSidebarView: View {
 
     @ViewBuilder
     private func rolesSection(node: TimelineNode) -> some View {
-        let linked    = project.screenRoles.filter { node.roleIDs.contains($0.id) }
-        let available = project.screenRoles.filter { !node.roleIDs.contains($0.id) }
+        let linked    = (project.screenRoles ?? []).filter { node.roleIDs.contains($0.id) }
+        let available = (project.screenRoles ?? []).filter { !node.roleIDs.contains($0.id) }
 
         VStack(alignment: .leading, spacing: 6) {
             if linked.isEmpty {
@@ -140,7 +140,7 @@ struct ScreenTimelineNodeSidebarView: View {
             Button {
                 showRolePicker = true
             } label: {
-                Label("Добавить роль", systemImage: "plus.circle")
+                Label(title: { Text("Добавить роль") }, icon: { Image(systemName: "plus.circle") })
                     .font(.subheadline)
                     .foregroundStyle(Color("AccentColor"))
             }
@@ -160,7 +160,7 @@ struct ScreenTimelineNodeSidebarView: View {
     // MARK: - Reusable UI
 
     @ViewBuilder
-    private func sectionLabel(_ text: String) -> some View {
+    private func sectionLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(Color("PrimaryText").opacity(0.4))
@@ -199,7 +199,7 @@ struct ScreenTimelineNodeSidebarView: View {
 
     private func pickerList<T: Identifiable>(
         items: [T],
-        title: String,
+        title: LocalizedStringKey,
         onSelect: @escaping (T) -> Void,
         label: @escaping (T) -> (primary: String, secondary: String?)
     ) -> some View {

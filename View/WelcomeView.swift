@@ -1,12 +1,28 @@
 import SwiftUI
 import SwiftData
+import Foundation
+import AuthenticationServices
+import AppKit
 
 struct WelcomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WritingProject.createdAt, order: .reverse) private var projects: [WritingProject]
 
+    @StateObject private var signInManager = AppleSignInManager.shared
     @State private var isShowingCreateSheet = false
     @State private var selectedProject: WritingProject? = nil
+    @State private var isShowingSettings = false
+    @State private var showSignOutAlert = false
+    @State private var showAboutPopover = false
+    @AppStorage("appTheme") private var appTheme: String = "system"
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appTheme {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +40,7 @@ struct WelcomeView: View {
                     VStack(spacing: 30) {
                         // Кнопка создания
                         Button(action: { isShowingCreateSheet = true }) {
-                            Label("Создать проект", systemImage: "plus.circle.fill")
+                            Label(title: { Text("Создать проект") }, icon: { Image(systemName: "plus.circle.fill") })
                                 .frame(width: 260)
                                 .padding()
                                 .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 5))
@@ -44,7 +60,7 @@ struct WelcomeView: View {
                                 }
                             }
                         } label: {
-                            Label("Мои проекты", systemImage: "chevron.down")
+                            Label(title: { Text("Мои проекты") }, icon: { Image(systemName: "chevron.down") })
                                 .frame(width: 260)
                                 .padding()
                                 .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 5))
@@ -55,13 +71,86 @@ struct WelcomeView: View {
                     Spacer()
 
                     HStack {
-                        Spacer()
-                        HStack(spacing: 20) {
-                            Image(systemName: "apple.logo")
-                            Image(systemName: "g.circle.fill")
+                        // Профиль пользователя (слева)
+                        if signInManager.isSignedIn, let user = signInManager.signedInUser {
+                            HStack(spacing: 8) {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(Color("AccentColor"))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(user.fullName)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color("PrimaryText"))
+                                    Text("iCloud")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color("SecondaryText"))
+                                }
+                                Button {
+                                    showSignOutAlert = true
+                                } label: {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(Color("SecondaryText"))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Выйти из аккаунта")
+                                .alert("account.alert.title", isPresented: $showSignOutAlert) {
+                                    Button("account.alert.signout") {
+                                        signInManager.signOut()
+                                    }
+                                    Button("account.alert.delete", role: .destructive) {
+                                        Task { await signInManager.deleteAccount() }
+                                    }
+                                    Button("account.alert.cancel", role: .cancel) {}
+                                } message: {
+                                    Text("account.alert.message")
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                        } else {
+                            Button {
+                                if let window = NSApp.keyWindow {
+                                    signInManager.signIn(presentingWindow: window)
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "apple.logo")
+                                        .font(.system(size: 16, weight: .medium))
+                                    Text("Войти через Apple")
+                                        .font(.system(size: 13, weight: .medium))
+                                }
+                                .foregroundStyle(Color("AccentColor"))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .overlay(Capsule().stroke(Color("AccentColor"), lineWidth: 1.5))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 12)
                         }
-                        .font(.title3)
-                        .foregroundStyle(Color("SecondaryText"))
+
+                        Spacer()
+
+                        Button {
+                            showAboutPopover = true
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                                .foregroundStyle(Color("AccentColor"))
+                                .font(.system(size: 40))
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $showAboutPopover, arrowEdge: .top) {
+                            AboutPopoverView()
+                        }
+
+                        Button {
+                            isShowingSettings = true
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundStyle(Color("AccentColor"))
+                                .font(.system(size: 40))
+                        }
+                        .buttonStyle(.plain)
                         .padding()
                     }
                 }
@@ -75,7 +164,92 @@ struct WelcomeView: View {
         .sheet(isPresented: $isShowingCreateSheet) {
             CreateProjectSheet()
         }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView()
+                .frame(minWidth: 540, minHeight: 480)
+        }
+        .preferredColorScheme(preferredColorScheme)
         .background(WindowStyler().frame(width: 0, height: 0))
+
+    }
+}
+
+// MARK: - About Popover
+
+private struct AboutPopoverView: View {
+    private let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Заголовок
+            HStack(spacing: 10) {
+                if let appIcon = NSApp.applicationIconImage {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 36, height: 36)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Impulse")
+                        .font(.system(.body, design: .serif, weight: .semibold))
+                        .foregroundStyle(Color("PrimaryText"))
+                    Text("Version \(appVersion)")
+                        .font(.caption)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            // Ссылки
+            VStack(spacing: 0) {
+                AboutLinkRow(icon: "globe", label: "Website", url: "https://impulsewriting.app")
+                Divider().padding(.leading, 36)
+                AboutLinkRow(icon: "lock.shield", label: "Privacy Policy", url: "https://impulsewriting.app/privacy")
+                Divider().padding(.leading, 36)
+                AboutLinkRow(icon: "doc.text", label: "Terms of Service", url: "https://impulsewriting.app/terms")
+                Divider().padding(.leading, 36)
+                AboutLinkRow(icon: "envelope", label: "Support", url: "mailto:support@impulsewriting.app")
+                Divider().padding(.leading, 36)
+                AboutLinkRow(icon: "book.pages", label: "Help", url: "https://impulsewriting.app/help")
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(width: 240)
+        .background(Color("PrimaryAccent"))
+    }
+}
+
+private struct AboutLinkRow: View {
+    let icon: String
+    let label: String
+    let url: String
+
+    var body: some View {
+        Button {
+            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color("AccentColor").opacity(0.8))
+                    .frame(width: 20)
+                Text(label)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color("PrimaryText"))
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color("SecondaryText").opacity(0.4))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -147,7 +321,7 @@ struct CreateProjectSheet: View {
                                             Image(systemName: type.icon)
                                                 .foregroundStyle(selectedType == type ? Color("AccentColor") : Color("SecondaryText"))
                                                 .frame(width: 20)
-                                            Text(type.rawValue)
+                                            Text(LocalizedStringKey(type.rawValue))
                                                 .foregroundStyle(selectedType == type ? Color("PrimaryText") : Color("SecondaryText"))
                                             Spacer()
                                             if selectedType == type {
@@ -200,7 +374,7 @@ struct CreateProjectSheet: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("❌ Ошибка: \(error.localizedDescription)")
+            // Ошибка сохранения — контекст откатится автоматически
         }
     }
 }

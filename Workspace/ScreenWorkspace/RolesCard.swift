@@ -15,7 +15,7 @@ struct RoleListView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(project.screenRoles, id: \.persistentModelID) { role in
+                ForEach(project.screenRoles ?? [], id: \.persistentModelID) { role in
                     let isSelected = selectedRole?.persistentModelID == role.persistentModelID
                     Button { selectedRole = role } label: {
                         RoleRowView(role: role, isSelected: isSelected)
@@ -71,7 +71,7 @@ struct RoleListView: View {
             }
         }
         .overlay {
-            if project.screenRoles.isEmpty {
+            if (project.screenRoles ?? []).isEmpty {
                 ZStack {
                     Color("PrimaryAccent").ignoresSafeArea()
                     VStack(spacing: 8) {
@@ -94,7 +94,7 @@ struct RoleListView: View {
         guard !name.isEmpty else { return }
         let role = ScreenRole(name: name)
         role.project = project
-        project.screenRoles.append(role)
+        project.screenRoles = (project.screenRoles ?? []) + [role]
         try? modelContext.save()
         selectedRole = role
         newRoleName = ""
@@ -145,7 +145,7 @@ struct RoleRowView: View {
 
 struct RoleCardView: View {
     @Bindable var role: ScreenRole
-    var onSceneTap: (Scene) -> Void = { _ in }
+    var onSceneTap: (ScreenScene) -> Void = { _ in }
     @Environment(\.modelContext) private var modelContext
 
     @State private var showDeleteAlert = false
@@ -242,6 +242,10 @@ struct RoleCardView: View {
                     Rectangle().fill(Color("Border")).frame(height: 0.5)
 
                     SceneAppearancesSection(role: role, onSceneTap: onSceneTap)
+
+                    Rectangle().fill(Color("Border")).frame(height: 0.5)
+
+                    RoleTimelineEventsSection(role: role)
                 }
                 .padding(24)
             }
@@ -251,20 +255,20 @@ struct RoleCardView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     PhotosPicker(selection: $photoItem, matching: .images) {
-                        Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
+                        Label(title: { Text("Выбрать из Фото") }, icon: { Image(systemName: "photo.on.rectangle") })
                     }
 
                     Button {
-                        openImageFromFinder { data in role.photoData = data }
+                        openRoleImageFromFinder { data in role.photoData = data }
                     } label: {
-                        Label("Выбрать файл...", systemImage: "folder")
+                        Label(title: { Text("Выбрать файл...") }, icon: { Image(systemName: "folder") })
                     }
 
                     if role.photoData != nil {
                         Button(role: .destructive) {
                             role.photoData = nil
                         } label: {
-                            Label("Удалить фото", systemImage: "photo.badge.minus")
+                            Label(title: { Text("Удалить фото") }, icon: { Image(systemName: "photo.badge.minus") })
                         }
                     }
 
@@ -273,7 +277,7 @@ struct RoleCardView: View {
                     Button(role: .destructive) {
                         showDeleteAlert = true
                     } label: {
-                        Label("Удалить роль", systemImage: "trash")
+                        Label(title: { Text("Удалить роль") }, icon: { Image(systemName: "trash") })
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -326,13 +330,13 @@ private func openRoleImageFromFinder(onSelect: @escaping (Data) -> Void) {
 
 struct SceneAppearancesSection: View {
     @Bindable var role: ScreenRole
-    var onSceneTap: (Scene) -> Void = { _ in }
+    var onSceneTap: (ScreenScene) -> Void = { _ in }
     @State private var showScenePicker = false
 
     var project: WritingProject? { role.project }
 
-    var availableScenes: [Scene] {
-        let linked = Set(role.appearsInScenes.map { $0.id })
+    var availableScenes: [ScreenScene] {
+        let linked = Set((role.appearsInScenes ?? []).map { $0.id })
         return (project?.scenes ?? [])
             .filter { !linked.contains($0.id) }
             .sorted { $0.orderIndex < $1.orderIndex }
@@ -342,22 +346,22 @@ struct SceneAppearancesSection: View {
         CardSection(icon: "film", title: "Появления в сценах") {
             VStack(alignment: .leading, spacing: 8) {
 
-                if role.appearsInScenes.isEmpty {
+                if (role.appearsInScenes ?? []).isEmpty {
                     Text("Ни одной сцены не добавлено")
                         .font(.subheadline)
                         .foregroundStyle(Color("SecondaryText").opacity(0.6))
                         .padding(.vertical, 4)
                 } else {
                     ForEach(
-                        role.appearsInScenes.sorted { $0.orderIndex < $1.orderIndex },
+                        (role.appearsInScenes ?? []).sorted { $0.orderIndex < $1.orderIndex },
                         id: \.id
                     ) { scene in
                         SceneLinkRow(
                             scene: scene,
                             onTap: { onSceneTap(scene) },
                             onRemove: {
-                                role.appearsInScenes.removeAll { $0.id == scene.id }
-                                scene.roles.removeAll { $0.id == role.id }
+                                role.appearsInScenes?.removeAll { $0.id == scene.id }
+                                scene.roles?.removeAll { $0.id == role.id }
                             }
                         )
                     }
@@ -366,7 +370,7 @@ struct SceneAppearancesSection: View {
                 Button {
                     showScenePicker = true
                 } label: {
-                    Label("Добавить сцену", systemImage: "plus.circle")
+                    Label(title: { Text("Добавить сцену") }, icon: { Image(systemName: "plus.circle") })
                         .font(.subheadline)
                         .foregroundStyle(Color("AccentColor"))
                 }
@@ -376,9 +380,9 @@ struct SceneAppearancesSection: View {
                     ScenePickerPopover(
                         scenes: availableScenes,
                         onSelect: { scene in
-                            role.appearsInScenes.append(scene)
-                            if !scene.roles.contains(where: { $0.id == role.id }) {
-                                scene.roles.append(role)
+                            role.appearsInScenes = (role.appearsInScenes ?? []) + [scene]
+                            if !(scene.roles ?? []).contains(where: { $0.id == role.id }) {
+                                scene.roles = (scene.roles ?? []) + [role]
                             }
                             showScenePicker = false
                         }
@@ -390,7 +394,7 @@ struct SceneAppearancesSection: View {
 }
 
 struct SceneLinkRow: View {
-    var scene: Scene
+    var scene: ScreenScene
     var onTap: () -> Void = { }
     var onRemove: () -> Void
 
@@ -408,7 +412,7 @@ struct SceneLinkRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: scene.status.icon)
                             .font(.caption2)
-                        Text(scene.status.rawValue)
+                        Text(LocalizedStringKey(scene.status.rawValue))
                             .font(.caption)
                     }
                     .foregroundStyle(scene.status.color)
@@ -433,8 +437,8 @@ struct SceneLinkRow: View {
 }
 
 struct ScenePickerPopover: View {
-    var scenes: [Scene]
-    var onSelect: (Scene) -> Void
+    var scenes: [ScreenScene]
+    var onSelect: (ScreenScene) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -463,7 +467,7 @@ struct ScenePickerPopover: View {
                                         Text(scene.title.isEmpty ? "Без названия" : scene.title)
                                             .font(.body)
                                             .foregroundStyle(Color("PrimaryText"))
-                                        Text(scene.status.rawValue)
+                                        Text(LocalizedStringKey(scene.status.rawValue))
                                             .font(.caption)
                                             .foregroundStyle(scene.status.color)
                                     }
@@ -483,6 +487,184 @@ struct ScenePickerPopover: View {
             }
         }
         .frame(minWidth: 240)
+        .background(Color("PrimaryAccent"))
+    }
+}
+
+// MARK: - Role Timeline Events Section
+
+private struct RoleTimelineEvent {
+    let track: TimelineTrack
+    let node: TimelineNode
+}
+
+struct RoleTimelineEventsSection: View {
+    @Bindable var role: ScreenRole
+
+    @State private var showEventPicker = false
+
+    /// Узлы, уже привязанные к этой роли.
+    private var linkedEvents: [RoleTimelineEvent] {
+        guard let project = role.project else { return [] }
+        var result: [RoleTimelineEvent] = []
+        for track in (project.timelineTracks ?? []) {
+            for node in track.nodes where node.roleIDs.contains(role.id) {
+                result.append(RoleTimelineEvent(track: track, node: node))
+            }
+        }
+        return result.sorted { $0.node.x < $1.node.x }
+    }
+
+    /// Все узлы проекта, ещё не привязанные к этой роли (доступны для добавления).
+    private var availableEvents: [RoleTimelineEvent] {
+        guard let project = role.project else { return [] }
+        var result: [RoleTimelineEvent] = []
+        for track in (project.timelineTracks ?? []) {
+            for node in track.nodes where !node.roleIDs.contains(role.id) {
+                result.append(RoleTimelineEvent(track: track, node: node))
+            }
+        }
+        return result.sorted { $0.node.x < $1.node.x }
+    }
+
+    var body: some View {
+        CardSection(icon: "calendar.day.timeline.left", title: "События таймлайна") {
+            VStack(alignment: .leading, spacing: 8) {
+                let events = linkedEvents
+
+                if events.isEmpty {
+                    Text("Роль не упоминается в таймлайне")
+                        .font(.subheadline)
+                        .foregroundStyle(Color("SecondaryText").opacity(0.6))
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(events, id: \.node.id) { item in
+                        HStack(spacing: 10) {
+                            Image(systemName: item.node.eventType == .range
+                                  ? "arrow.left.and.right"
+                                  : "smallcircle.filled.circle")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color("AccentColor").opacity(0.7))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.node.title.isEmpty ? "Без названия" : item.node.title)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color("PrimaryText"))
+                                Text(item.track.title.isEmpty ? "Без трека" : item.track.title)
+                                    .font(.caption)
+                                    .foregroundStyle(Color("SecondaryText"))
+                            }
+                            Spacer()
+                            Button {
+                                removeRole(from: item)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color("SecondaryText"))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color("AccentColor").opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+
+                Button {
+                    showEventPicker = true
+                } label: {
+                    Label(title: { Text("Добавить событие") }, icon: { Image(systemName: "plus.circle") })
+                        .font(.subheadline)
+                        .foregroundStyle(Color("AccentColor"))
+                }
+                .buttonStyle(.plain)
+                .disabled(availableEvents.isEmpty)
+                .popover(isPresented: $showEventPicker, arrowEdge: .bottom) {
+                    TimelineEventPickerPopover(
+                        events: availableEvents,
+                        onSelect: { item in
+                            addRole(to: item)
+                            showEventPicker = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private func addRole(to item: RoleTimelineEvent) {
+        var nodes = item.track.nodes
+        guard let idx = nodes.firstIndex(where: { $0.id == item.node.id }) else { return }
+        if !nodes[idx].roleIDs.contains(role.id) {
+            nodes[idx].roleIDs.append(role.id)
+            item.track.nodes = nodes
+        }
+    }
+
+    private func removeRole(from item: RoleTimelineEvent) {
+        var nodes = item.track.nodes
+        guard let idx = nodes.firstIndex(where: { $0.id == item.node.id }) else { return }
+        nodes[idx].roleIDs.removeAll { $0 == role.id }
+        item.track.nodes = nodes
+    }
+}
+
+private struct TimelineEventPickerPopover: View {
+    var events: [RoleTimelineEvent]
+    var onSelect: (RoleTimelineEvent) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Выберите событие")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            Divider()
+
+            if events.isEmpty {
+                Text("Нет доступных событий")
+                    .font(.subheadline)
+                    .foregroundStyle(Color("SecondaryText"))
+                    .padding(16)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(events, id: \.node.id) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: item.node.eventType == .range
+                                          ? "arrow.left.and.right"
+                                          : "smallcircle.filled.circle")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color("AccentColor").opacity(0.7))
+                                        .frame(width: 16)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.node.title.isEmpty ? "Без названия" : item.node.title)
+                                            .font(.body)
+                                            .foregroundStyle(Color("PrimaryText"))
+                                        Text(item.track.title.isEmpty ? "Без трека" : item.track.title)
+                                            .font(.caption)
+                                            .foregroundStyle(Color("SecondaryText"))
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus")
+                                        .foregroundStyle(Color("AccentColor"))
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
+                }
+                .frame(maxHeight: 280)
+            }
+        }
+        .frame(minWidth: 260)
         .background(Color("PrimaryAccent"))
     }
 }

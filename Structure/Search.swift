@@ -53,7 +53,7 @@ struct SearchView: View {
                         mode = m
                         if hasSearched { runSearch() }
                     } label: {
-                        Text(m.rawValue)
+                        Text(LocalizedStringKey(m.rawValue))
                             .font(.system(size: 11, weight: mode == m ? .semibold : .regular))
                             .foregroundStyle(mode == m ? Color("AccentColor") : Color("SecondaryText"))
                             .padding(.horizontal, 10)
@@ -122,7 +122,7 @@ struct SearchView: View {
     // MARK: - Grouping
 
     private var groupedResults: [SearchGroup] {
-        let order: [SearchResultType] = [.chapter, .character, .timeline,
+        let order: [SearchResultType] = [.chapter, .character,
                                           .worldResource, .worldConcept,
                                           .worldStructure, .metaphysics]
         var groups: [SearchGroup] = []
@@ -274,7 +274,6 @@ struct SearchHintView: View {
             return [
                 ("textformat.abc", "Точное совпадение слов"),
                 ("globe.europe.africa", "Главы, персонажи, мироустройство"),
-                ("calendar", "События таймлайна"),
             ]
         case .combined:
             return [

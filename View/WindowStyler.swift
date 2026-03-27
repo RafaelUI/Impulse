@@ -15,6 +15,7 @@ struct WindowStyler: NSViewRepresentable {
     }
 }
 
+
 final class StylerView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -56,53 +57,43 @@ final class StylerView: NSView {
 
     private func hideSplitViewDividers() {
         guard let contentView = window?.contentView else { return }
-        // Ищем только верхний NSSplitView — не рекурсируем вглубь detail колонки
-        guard let splitView = findTopSplitView(in: contentView) else { return }
-        styleTopSplitView(splitView)
+        styleAllSplitViews(in: contentView)
     }
 
-    private func findTopSplitView(in view: NSView) -> NSSplitView? {
-        if let sv = view as? NSSplitView { return sv }
-        for sub in view.subviews {
-            if let found = findTopSplitView(in: sub) { return found }
+    /// Рекурсивно находит и стилизует все NSSplitView в иерархии
+    private func styleAllSplitViews(in view: NSView) {
+        if let sv = view as? NSSplitView {
+            styleSplitView(sv)
         }
-        return nil
+        for sub in view.subviews {
+            styleAllSplitViews(in: sub)
+        }
     }
 
-    private func styleTopSplitView(_ splitView: NSSplitView) {
-        splitView.dividerStyle = .thin
-
-        // Скрываем divider-views (не arrangedSubviews) — красим в PrimaryAccent
+    private func styleSplitView(_ splitView: NSSplitView) {
+        // Скрываем divider — subview не входящий в arrangedSubviews
         let arranged = Set(splitView.arrangedSubviews.map { ObjectIdentifier($0) })
         for sub in splitView.subviews where !arranged.contains(ObjectIdentifier(sub)) {
-            sub.wantsLayer = true
-            sub.layer?.backgroundColor = NSColor(named: "PrimaryAccent")?.cgColor
-            sub.subviews.forEach { $0.isHidden = true }
+            sub.alphaValue = 0
         }
 
-        // Только прямой NSVisualEffectView sidebar колонки — не рекурсируем вглубь
-        if let sidebarColumn = splitView.arrangedSubviews.first {
-            for sub in sidebarColumn.subviews {
-                if let vev = sub as? NSVisualEffectView {
-                    vev.material = .windowBackground
-                    vev.blendingMode = .withinWindow
-                    vev.state = .inactive
-                    vev.wantsLayer = true
-                    vev.layer?.cornerRadius = 0
-                    vev.layer?.masksToBounds = false
-                    vev.layer?.backgroundColor = .clear
-                }
-            }
-            // Один уровень глубже — SwiftUI hosting view может обернуть VEV
-            if let vev = sidebarColumn as? NSVisualEffectView {
-                vev.material = .windowBackground
-                vev.blendingMode = .withinWindow
-                vev.state = .inactive
-                vev.wantsLayer = true
-                vev.layer?.cornerRadius = 0
-                vev.layer?.masksToBounds = false
-                vev.layer?.backgroundColor = .clear
-            }
+        // Убираем NSVisualEffectView (серый фон сайдбара) в каждой колонке
+        for column in splitView.arrangedSubviews {
+            removeVisualEffect(in: column, depth: 2)
+        }
+    }
+
+    private func removeVisualEffect(in view: NSView, depth: Int) {
+        guard depth >= 0 else { return }
+        if let vev = view as? NSVisualEffectView {
+            vev.material = .windowBackground
+            vev.blendingMode = .withinWindow
+            vev.state = .inactive
+            vev.wantsLayer = true
+            vev.layer?.backgroundColor = .clear
+        }
+        for sub in view.subviews {
+            removeVisualEffect(in: sub, depth: depth - 1)
         }
     }
 }

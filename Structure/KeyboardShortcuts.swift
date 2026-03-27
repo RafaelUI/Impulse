@@ -38,7 +38,7 @@ struct SceneInfoView: View {
         VStack(spacing: 0) {
             // ── Заголовок ────────────────────────────────────────────────
             HStack(alignment: .center, spacing: 10) {
-                Text(scene.title.isEmpty ? "Без названия" : scene.title)
+                Text(scene.title.isEmpty ? String(localized: "Без названия") : scene.title)
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(Color("PrimaryText"))
                     .lineLimit(1)
@@ -87,15 +87,30 @@ struct SceneInfoView: View {
             Divider()
 
             // ── Вкладки ──────────────────────────────────────────────────
-            Picker("", selection: $selectedTab) {
+            HStack(spacing: 2) {
                 ForEach(InfoTab.allCases) { tab in
-                    Image(systemName: tab.icon)
-                        .tag(tab)
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(selectedTab == tab
+                                ? Color("AccentColor")
+                                : Color("SecondaryText").opacity(0.5))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(selectedTab == tab
+                                        ? Color("AccentColor").opacity(0.12)
+                                        : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 6)
 
             Divider()
 
@@ -140,7 +155,7 @@ private struct InfoTabView: View {
                 // Переключатель вариаций
                 if vars.count > 1 {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Вариация")
+                        Text("Вариация" as LocalizedStringKey)
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color("SecondaryText").opacity(0.5))
                             .textCase(.uppercase)
@@ -167,7 +182,7 @@ private struct InfoTabView: View {
                     let charCount = v.text.count
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(vars.count > 1 ? "Статистика вариации" : "Статистика")
+                        Text(vars.count > 1 ? LocalizedStringKey("Статистика вариации") : LocalizedStringKey("Статистика"))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color("SecondaryText").opacity(0.5))
                             .textCase(.uppercase)
@@ -193,7 +208,7 @@ private struct InfoTabView: View {
                     let totalChars = vars.reduce(0) { $0 + $1.text.count }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Итого по сцене")
+                        Text("Итого по сцене" as LocalizedStringKey)
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color("SecondaryText").opacity(0.5))
                             .textCase(.uppercase)
@@ -251,8 +266,8 @@ private struct RolesTabView: View {
     @Binding var showRolePicker: Bool
 
     var availableRoles: [ScreenRole] {
-        let linked = Set(scene.roles.map { $0.id })
-        return project.screenRoles
+        let linked = Set((scene.roles ?? []).map { $0.id })
+        return (project.screenRoles ?? [])
             .filter { !linked.contains($0.id) }
             .sorted { $0.name < $1.name }
     }
@@ -277,9 +292,9 @@ private struct RolesTabView: View {
                     .disabled(availableRoles.isEmpty)
                     .popover(isPresented: $showRolePicker, arrowEdge: .bottom) {
                         RolePickerPopover(roles: availableRoles) { role in
-                            scene.roles.append(role)
-                            if !role.appearsInScenes.contains(where: { $0.id == scene.id }) {
-                                role.appearsInScenes.append(scene)
+                            scene.roles = (scene.roles ?? []) + [role]
+                            if !(role.appearsInScenes ?? []).contains(where: { $0.id == scene.id }) {
+                                role.appearsInScenes = (role.appearsInScenes ?? []) + [scene]
                             }
                             showRolePicker = false
                         }
@@ -291,15 +306,15 @@ private struct RolesTabView: View {
 
                 Divider().padding(.horizontal, 28)
 
-                if scene.roles.isEmpty {
-                    Text("Нет ролей")
+                if (scene.roles ?? []).isEmpty {
+                    Text("Нет ролей" as LocalizedStringKey)
                         .font(.body)
                         .foregroundStyle(Color("SecondaryText").opacity(0.4))
                         .padding(.horizontal, 28)
                         .padding(.vertical, 20)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(scene.roles) { role in
+                        ForEach(scene.roles ?? []) { role in
                             HStack(spacing: 10) {
                                 Image(systemName: "person")
                                     .font(.system(size: 13))
@@ -307,7 +322,7 @@ private struct RolesTabView: View {
                                     .frame(width: 20)
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(role.name.isEmpty ? "Без имени" : role.name)
+                                    Text(role.name.isEmpty ? String(localized: "Без имени") : role.name)
                                         .font(.body)
                                         .foregroundStyle(Color("PrimaryText"))
                                     if !role.role.isEmpty {
@@ -320,8 +335,8 @@ private struct RolesTabView: View {
                                 Spacer()
 
                                 Button {
-                                    scene.roles.removeAll { $0.id == role.id }
-                                    role.appearsInScenes.removeAll { $0.id == scene.id }
+                                    scene.roles?.removeAll { $0.id == role.id }
+                                    role.appearsInScenes?.removeAll { $0.id == scene.id }
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 16))
@@ -351,7 +366,7 @@ private struct RolePickerPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Добавить роль")
+            Text("Добавить роль" as LocalizedStringKey)
                 .font(.headline)
                 .foregroundStyle(Color("PrimaryText"))
                 .padding(.horizontal, 16)
@@ -361,7 +376,7 @@ private struct RolePickerPopover: View {
             Divider()
 
             if roles.isEmpty {
-                Text("Нет доступных ролей")
+                Text("Нет доступных ролей" as LocalizedStringKey)
                     .font(.body)
                     .foregroundStyle(Color("SecondaryText"))
                     .padding(16)
@@ -374,7 +389,7 @@ private struct RolePickerPopover: View {
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(role.name.isEmpty ? "Без имени" : role.name)
+                                        Text(role.name.isEmpty ? String(localized: "Без имени") : role.name)
                                             .font(.body)
                                             .foregroundStyle(Color("PrimaryText"))
                                         if !role.role.isEmpty {
@@ -411,7 +426,7 @@ private struct SceneStatusPickerPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Статус")
+            Text("Статус" as LocalizedStringKey)
                 .font(.headline)
                 .foregroundStyle(Color("PrimaryText"))
                 .padding(.horizontal, 16)
@@ -455,7 +470,7 @@ private struct SceneStatusPickerPopover: View {
 // MARK: - Helpers
 
 private struct StatItem: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
 
     var body: some View {

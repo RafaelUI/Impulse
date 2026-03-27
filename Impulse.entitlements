@@ -12,7 +12,7 @@
 	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>Icloud.Cloud.Impulse</string>
+		<string>iCloud.Cloud.Impulse</string>
 	</array>
 	<key>com.apple.developer.apple-id.sign-in</key>
 	<array>

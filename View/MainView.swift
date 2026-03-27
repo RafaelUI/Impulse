@@ -12,8 +12,6 @@ struct MainWorkspaceView: View {
             NovelWorkspace(project: project)
         case .screenplay:
             ScreenplayWorkspace(project: project)
-        case .scientific:
-            ScienceWorkspace(project: project)
         }
     }
 }
