@@ -17,6 +17,11 @@ struct WindowStyler: NSViewRepresentable {
 
 
 final class StylerView: NSView {
+
+    // KVO observation on toolbar.isVisible — guards against SwiftUI flipping it to false
+    private var toolbarObservation: NSKeyValueObservation?
+    private var observedToolbar: NSToolbar?
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         scheduleStyle()
@@ -24,19 +29,51 @@ final class StylerView: NSView {
 
     func scheduleStyle() {
         applyWindowStyle()
-        // Применяем трижды с нарастающей задержкой — пока SwiftUI достраивает иерархию
-        for delay in [0.05, 0.15, 0.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.hideSplitViewDividers()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.applyWindowStyle()
+            self?.hideSplitViewDividers()
+            self?.installToolbarGuard()
+        }
+    }
+
+    // MARK: - Toolbar Guard (KVO)
+
+    /// Устанавливает KVO-наблюдатель на toolbar.isVisible.
+    /// Когда SwiftUI или AppKit сбрасывает isVisible = false (overlay-режим),
+    /// наблюдатель немедленно восстанавливает isVisible = true.
+    private func installToolbarGuard() {
+        guard let toolbar = window?.toolbar else { return }
+        // Переустанавливаем только если тулбар сменился
+        guard toolbar !== observedToolbar else { return }
+
+        toolbarObservation?.invalidate()
+        toolbarObservation = nil
+        observedToolbar = toolbar
+
+        toolbarObservation = toolbar.observe(\.isVisible, options: [.new]) { [weak self] tb, change in
+            guard let self, let newVal = change.newValue, !newVal else { return }
+            // Восстанавливаем на следующем цикле runloop чтобы не входить в рекурсию
+            DispatchQueue.main.async {
+                if let toolbar = self.window?.toolbar, !toolbar.isVisible {
+                    toolbar.isVisible = true
+                }
             }
         }
     }
+
+    // MARK: - Style Application
 
     private func applyWindowStyle() {
         guard let window else { return }
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.titlebarSeparatorStyle = .none
+
+        // Форсируем toolbar в фиксированный (не overlay) режим.
+        if let toolbar = window.toolbar, !toolbar.isVisible {
+            toolbar.isVisible = true
+        }
+
         // Убираем separator под toolbar (deprecated в 15, но работает как fallback)
         #if compiler(>=5.9)
         if #available(macOS 15, *) { } else {
