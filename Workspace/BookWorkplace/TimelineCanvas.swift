@@ -498,6 +498,9 @@ final class TimelineNSCanvasView: NSView {
         if selectedPoint?.nodeID == nodeID { selectedPoint = nil }
         if hoveredPoint?.nodeID == nodeID { hoveredPoint = nil }
 
+        // Сообщаем SwiftUI, что выбор снят — чтобы сайдбар закрылся до сохранения
+        onSelectNode(nil)
+
         onSave?()
         needsDisplay = true
     }
@@ -509,3 +512,4 @@ final class TimelineNSCanvasView: NSView {
         return NSSize(width: NSView.noIntrinsicMetric, height: h)
     }
 }
+

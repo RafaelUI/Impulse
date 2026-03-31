@@ -126,6 +126,14 @@ struct TimelineWorkspaceView: View {
                                 renamingTitle = track.title
                             },
                             onDelete: {
+                                // Если удаляем выбранный трек или открытый узел внутри него — сперва сбрасываем выделения и закрываем сайдбар
+                                if let sel = selectedNode, sel.trackIdx < sorted.count, sorted[sel.trackIdx].id == track.id {
+                                    withAnimation(.easeInOut(duration: 0.2)) { selectedNode = nil }
+                                }
+                                if let st = selectedTrack, st.id == track.id {
+                                    selectedTrack = nil
+                                }
+                                // Удаляем трек
                                 modelContext.delete(track)
                                 try? modelContext.save()
                             }

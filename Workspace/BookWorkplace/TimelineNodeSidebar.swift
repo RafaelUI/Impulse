@@ -24,16 +24,32 @@ struct TimelineNodeSidebarView: View {
 
     // Вспомогательный Binding для мутации
     private func nodeBinding<V>(_ keyPath: WritableKeyPath<TimelineNode, V>) -> Binding<V>? {
-        guard let i = nodeIndex else { return nil }
-        return Binding(
-            get: { self.track.nodes[i][keyPath: keyPath] },
-            set: { newVal in
-                var nodes = self.track.nodes
-                nodes[i][keyPath: keyPath] = newVal
-                self.track.nodes = nodes
-                self.onSave()
-            }
-        )
+        if let current = node {
+            let cached = current[keyPath: keyPath]
+            return Binding(
+                get: {
+                    if let idx = self.track.nodes.firstIndex(where: { $0.id == self.nodeID }),
+                       idx < self.track.nodes.count {
+                        return self.track.nodes[idx][keyPath: keyPath]
+                    } else {
+                        return cached
+                    }
+                },
+                set: { newVal in
+                    if let idx = self.track.nodes.firstIndex(where: { $0.id == self.nodeID }),
+                       idx < self.track.nodes.count {
+                        var nodes = self.track.nodes
+                        nodes[idx][keyPath: keyPath] = newVal
+                        self.track.nodes = nodes
+                        self.onSave()
+                    } else {
+                        // Узел уже удалён — безопасно игнорируем запись
+                    }
+                }
+            )
+        } else {
+            return nil
+        }
     }
 
     // MARK: Picker state
@@ -322,3 +338,4 @@ struct TimelineNodeSidebarView: View {
         mutateNode { node in node.locationIDs.removeAll { $0 == id } }
     }
 }
+
