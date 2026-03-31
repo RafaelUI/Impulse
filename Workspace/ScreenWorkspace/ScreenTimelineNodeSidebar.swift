@@ -23,13 +23,19 @@ struct ScreenTimelineNodeSidebarView: View {
         return track.nodes[i]
     }
 
-    private func nodeBinding<V>(_ keyPath: WritableKeyPath<TimelineNode, V>) -> Binding<V>? {
-        guard let i = nodeIndex else { return nil }
+    private func stringBinding(_ keyPath: WritableKeyPath<TimelineNode, String>) -> Binding<String>? {
         return Binding(
-            get: { self.track.nodes[i][keyPath: keyPath] },
+            get: {
+                guard let idx = self.track.nodes.firstIndex(where: { $0.id == self.nodeID }) else {
+                    // Узел уже удалён — вернём пустую строку, чтобы не падать
+                    return ""
+                }
+                return self.track.nodes[idx][keyPath: keyPath]
+            },
             set: { newVal in
+                guard let idx = self.track.nodes.firstIndex(where: { $0.id == self.nodeID }) else { return }
                 var nodes = self.track.nodes
-                nodes[i][keyPath: keyPath] = newVal
+                nodes[idx][keyPath: keyPath] = newVal
                 self.track.nodes = nodes
                 self.onSave()
             }
@@ -40,8 +46,8 @@ struct ScreenTimelineNodeSidebarView: View {
 
     var body: some View {
         guard let node = node,
-              let titleBinding = nodeBinding(\.title),
-              let noteBinding  = nodeBinding(\.note)
+              let titleBinding = stringBinding(\.title),
+              let noteBinding  = stringBinding(\.note)
         else { return AnyView(EmptyView()) }
 
         return AnyView(

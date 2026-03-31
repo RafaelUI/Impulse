@@ -497,6 +497,7 @@ final class TimelineNSCanvasView: NSView {
 
         if selectedPoint?.nodeID == nodeID { selectedPoint = nil }
         if hoveredPoint?.nodeID == nodeID { hoveredPoint = nil }
+        onSelectNode(nil)
 
         onSave?()
         needsDisplay = true
