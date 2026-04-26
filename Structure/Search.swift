@@ -1,6 +1,10 @@
 import SwiftUI
 import Combine
 
+// MARK: - Search View Mode
+
+enum SearchViewMode { case list, constellation }
+
 // MARK: - Search View
 
 struct SearchView: View {
@@ -13,6 +17,7 @@ struct SearchView: View {
     @State private var results: [SearchResult] = []
     @State private var hasSearched = false
     @State private var mode: SearchMode = .combined
+    @State private var viewMode: SearchViewMode = .constellation
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,6 +79,28 @@ struct SearchView: View {
                     Text("\(results.count) результатов")
                         .font(.system(size: 11))
                         .foregroundStyle(Color("SecondaryText").opacity(0.6))
+
+                    Button {
+                        withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                            viewMode = viewMode == .list ? .constellation : .list
+                        }
+                    } label: {
+                        Image(systemName: viewMode == .constellation ? "list.bullet" : "circle.grid.2x2")
+                            .font(.system(size: 13))
+                            .foregroundStyle(viewMode == .constellation
+                                ? Color("AccentColor")
+                                : Color("SecondaryText").opacity(0.5))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                viewMode == .constellation
+                                    ? Color("AccentColor").opacity(0.12)
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewMode == .constellation ? "Список" : "Созвездие")
                 }
             }
             .padding(.horizontal, 16)
@@ -91,10 +118,16 @@ struct SearchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            } else if !results.isEmpty {
+            } else if hasSearched && results.isEmpty {
+                ContentUnavailableView(
+                    "Ничего не найдено",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text("Попробуйте другой режим или переформулируйте запрос")
+                )
+
+            } else if !results.isEmpty && viewMode == .list {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        // Группируем по типу
                         ForEach(groupedResults, id: \.type) { group in
                             SearchGroupSection(
                                 group: group,
@@ -105,15 +138,9 @@ struct SearchView: View {
                     .padding(.vertical, 8)
                 }
 
-            } else if hasSearched {
-                ContentUnavailableView(
-                    "Ничего не найдено",
-                    systemImage: "doc.text.magnifyingglass",
-                    description: Text("Попробуйте другой режим или переформулируйте запрос")
-                )
-
             } else {
-                SearchHintView(mode: mode)
+                ConstellationView(query: query, nodes: constellationNodes,
+                                  onSelect: handleConstellationSelect)
             }
         }
         .background(Color("PrimaryAccent"))
@@ -139,6 +166,19 @@ struct SearchView: View {
         if let chapter   = result.chapter   { onChapterSelect(chapter) }
         if let character = result.character { onCharacterSelect(character) }
         // Мироустройство и таймлайн — можно расширить навигацию позже
+    }
+
+    private var constellationNodes: [ConstellationNode] {
+        results.map { r in
+            ConstellationNode(id: r.id, chapter: r.title, score: r.score,
+                              snippet: r.snippet, type: r.type)
+        }
+    }
+
+    private func handleConstellationSelect(_ node: ConstellationNode) {
+        if let result = results.first(where: { $0.id == node.id }) {
+            handleSelect(result)
+        }
     }
 
     private func runSearch() {
@@ -257,52 +297,4 @@ struct SearchResultRow: View {
     }
 }
 
-// MARK: - Hint
-
-struct SearchHintView: View {
-    let mode: SearchMode
-
-    var hints: [(icon: String, text: String)] {
-        switch mode {
-        case .semantic:
-            return [
-                ("sparkles", "Ищет по смыслу, а не словам"),
-                ("doc.text", "Главы и персонажи"),
-                ("quote.bubble", "Понимает синонимы и контекст"),
-            ]
-        case .keyword:
-            return [
-                ("textformat.abc", "Точное совпадение слов"),
-                ("globe.europe.africa", "Главы, персонажи, мироустройство"),
-            ]
-        case .combined:
-            return [
-                ("sparkles", "Семантика + ключевые слова"),
-                ("globe.europe.africa", "Все данные проекта"),
-                ("arrow.up.arrow.down", "Объединённый рейтинг"),
-            ]
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: 36))
-                .foregroundStyle(Color("AccentColor").opacity(0.5))
-
-            Text("Поиск по проекту")
-                .font(.headline)
-
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(hints, id: \.text) { hint in
-                    Label(hint.text, systemImage: hint.icon)
-                        .font(.subheadline)
-                        .foregroundStyle(Color("SecondaryText"))
-                }
-            }
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
 

@@ -83,84 +83,28 @@ struct ProjectSearchView: View {
                         .foregroundStyle(Color("PrimaryText"))
                 }
                 .frame(maxWidth: .infinity)
-                // Центрируем выше строки поиска: строка на height/2 - 90, декор — ещё на 100 выше
                 .offset(y: geo.size.height / 2 - 190)
                 .opacity(hasSearched ? 0 : 1)
                 .allowsHitTesting(!hasSearched)
 
-                Text("Поиск по словам — мгновенно\nСемантический поиск по тексту глав — глубоко")
-                    .font(.caption)
-                    .foregroundStyle(Color("SecondaryText").opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .offset(y: geo.size.height / 2 - 30)
-                    .opacity(hasSearched ? 0 : 1)
-                    .allowsHitTesting(false)
-
-                // ── Результаты — всегда в дереве, показываются по opacity ──
+                // ── Результаты ──
                 VStack(spacing: 0) {
                     Color.clear.frame(height: 56)
                     Divider()
 
-                    if showEmpty && keywordResults.isEmpty && semanticResults.isEmpty && !isSemanticRunning {
+                    if showEmpty && semanticResults.isEmpty && !isSemanticRunning {
                         ContentUnavailableView(
                             "Ничего не найдено",
                             systemImage: "doc.text.magnifyingglass",
                             description: Text("Попробуйте другую формулировку")
                         )
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                if !keywordResults.isEmpty {
-                                    sectionHeader(icon: "textformat.abc", title: "По словам", count: keywordResults.count)
-                                    ForEach(keywordResults) { result in
-                                        SearchResultRow(result: result) { handleSelect(result) }
-                                            .transition(.asymmetric(
-                                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                                removal: .opacity
-                                            ))
-                                        if result.id != keywordResults.last?.id {
-                                            Divider().padding(.leading, 60)
-                                        }
-                                    }
-                                    Divider().padding(.top, 4)
-                                }
-                                if scope.allowSemanticChapters || scope.allowSemanticScenes {
-                                    sectionHeader(
-                                        icon: "sparkles",
-                                        title: "По смыслу",
-                                        count: semanticResults.count,
-                                        isLoading: isSemanticRunning,
-                                        progress: semanticProgress,
-                                        total: semanticTotal
-                                    )
-                                    if semanticResults.isEmpty && isSemanticRunning {
-                                        HStack {
-                                            Spacer()
-                                            Text(scope.allowSemanticScenes ? "Анализируем текст сцен..." : "Анализируем текст глав...")
-                                                .font(.caption)
-                                                .foregroundStyle(Color("SecondaryText").opacity(0.6))
-                                            Spacer()
-                                        }
-                                        .padding(.vertical, 16)
-                                    } else {
-                                        ForEach(semanticResults) { result in
-                                            SearchResultRow(result: result) { handleSelect(result) }
-                                                .transition(.asymmetric(
-                                                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                                                    removal: .opacity
-                                                ))
-                                            if result.id != semanticResults.last?.id {
-                                                Divider().padding(.leading, 60)
-                                            }
-                                        }
-                                    }
-                                }
+                        ConstellationView(query: query, nodes: constellationNodes, onSelect: { node in
+                            if let result = semanticResults.first(where: { $0.id == node.id }) {
+                                handleSelect(result)
                             }
-                            .padding(.vertical, 8)
-                            .animation(.spring(duration: 1.0, bounce: 0.15), value: keywordResults.map(\.id))
-                            .animation(.spring(duration: 1.0, bounce: 0.15), value: semanticResults.map(\.id))
-                        }
+                        })
+                        .transition(.opacity)
                     }
                 }
                 .opacity(hasSearched ? 1 : 0)
@@ -214,40 +158,13 @@ struct ProjectSearchView: View {
         )
     }
 
-    // MARK: - Section Header
+    // MARK: - Constellation Data
 
-    @ViewBuilder
-    private func sectionHeader(
-        icon: String,
-        title: LocalizedStringKey,
-        count: Int,
-        isLoading: Bool = false,
-        progress: Int = 0,
-        total: Int = 0
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundStyle(Color("AccentColor").opacity(0.7))
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(Color("SecondaryText"))
-            if count > 0 {
-                Text("·  \(count)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color("SecondaryText").opacity(0.6))
-            }
-            Spacer()
-            if isLoading && total > 0 {
-                Text("\(progress)/\(total)")
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(Color("AccentColor").opacity(0.5))
-            }
+    private var constellationNodes: [ConstellationNode] {
+        semanticResults.map { r in
+            ConstellationNode(id: r.id, chapter: r.title, score: r.score,
+                              snippet: r.snippet, type: r.type)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 7)
-        .background(Color("PrimaryAccent"))
     }
 
     // MARK: - Logic

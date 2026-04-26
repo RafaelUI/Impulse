@@ -59,7 +59,7 @@ final class EmbeddingService: ObservableObject {
 
     static let shared = EmbeddingService()
 
-    private var model: float16_model?
+    private var model: LiteraryMiniLM?
     private var vocab: [String: Int] = [:]
 
     private let maxLength = 128
@@ -77,15 +77,15 @@ final class EmbeddingService: ObservableObject {
 
     private func load() async {
         let loadedMLModel: MLModel? = await Task.detached(priority: .background) {
-            guard let url = Bundle.main.url(forResource: "float16_model", withExtension: "mlmodelc")
-                         ?? Bundle.main.url(forResource: "float16_model", withExtension: "mlpackage") else {
+            guard let url = Bundle.main.url(forResource: "LiteraryMiniLM", withExtension: "mlmodelc")
+                         ?? Bundle.main.url(forResource: "LiteraryMiniLM", withExtension: "mlpackage") else {
                 return nil
             }
             let config = MLModelConfiguration()
             config.computeUnits = .all
             return try? MLModel(contentsOf: url, configuration: config)
         }.value
-        let loadedModel: float16_model? = loadedMLModel.map { float16_model(model: $0) }
+        let loadedModel: LiteraryMiniLM? = loadedMLModel.map { LiteraryMiniLM(model: $0) }
 
         guard let vocabURL = Bundle.main.url(forResource: "vocab", withExtension: "txt"),
               let content = try? String(contentsOf: vocabURL, encoding: .utf8) else {
@@ -512,11 +512,13 @@ final class EmbeddingService: ObservableObject {
         guard !tokens.inputIDs.isEmpty else { return nil }
         guard let inputIDs = makeMultiArray(tokens.inputIDs),
               let attnMask = makeMultiArray(tokens.attentionMask) else { return nil }
-        let input = float16_modelInput(input_ids: inputIDs, attention_mask: attnMask)
+        let input = LiteraryMiniLMInput(input_ids: inputIDs, attention_mask: attnMask)
         guard let output = try? model.prediction(input: input) else { return nil }
-        return meanPool(output.last_hidden_state, mask: tokens.attentionMask)
+        let emb = output.embeddings
+        var result = [Float](repeating: 0, count: emb.count)
+        for i in 0..<emb.count { result[i] = emb[i].floatValue }
+        return result
     }
-
     // MARK: - Токенайзер
 
     private struct TokenizerOutput {

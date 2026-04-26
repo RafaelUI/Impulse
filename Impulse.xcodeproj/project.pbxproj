@@ -24,9 +24,10 @@
 		126525A62F752AA800C12568 /* AppleSignInManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126525A52F752AA800C12568 /* AppleSignInManager.swift */; };
 		126525A82F75353900C12568 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 126525A72F75353900C12568 /* PrivacyInfo.xcprivacy */; };
 		1267BBB62F654D5200867B1D /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */; };
+		129AF68B2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */; };
 		12E074FB2F54937400D8F380 /* vocab.txt in Resources */ = {isa = PBXBuildFile; fileRef = 12E074FA2F54937400D8F380 /* vocab.txt */; };
 		12E074FD2F54966800D8F380 /* Quicksearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E074FC2F54965D00D8F380 /* Quicksearch.swift */; };
-		12E075742F55DB0600D8F380 /* float16_model.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 12E075732F55DB0600D8F380 /* float16_model.mlpackage */; };
+		CC0000012FA0000000000001 /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000002FA0000000000001 /* ConstellationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,9 +51,10 @@
 		126525A52F752AA800C12568 /* AppleSignInManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInManager.swift; sourceTree = "<group>"; };
 		126525A72F75353900C12568 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
+		129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = LiteraryMiniLM.mlpackage; sourceTree = "<group>"; };
 		12E074FA2F54937400D8F380 /* vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = vocab.txt; sourceTree = "<group>"; };
 		12E074FC2F54965D00D8F380 /* Quicksearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quicksearch.swift; sourceTree = "<group>"; };
-		12E075732F55DB0600D8F380 /* float16_model.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = float16_model.mlpackage; sourceTree = "<group>"; };
+		CC0000002FA0000000000001 /* ConstellationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConstellationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -107,7 +109,7 @@
 				12232AAB2F602993001D8938 /* LanguageManager.swift */,
 				12E074FC2F54965D00D8F380 /* Quicksearch.swift */,
 				12E074FA2F54937400D8F380 /* vocab.txt */,
-				12E075732F55DB0600D8F380 /* float16_model.mlpackage */,
+				129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */,
 				121247C52F60282E006EA54A /* tokenizer.json */,
 				124A08C52F547E090070504C /* Search.swift */,
 				124A08C32F547D670070504C /* Embeddingservice.swift */,
@@ -116,6 +118,7 @@
 				121247A82F5EDA08006EA54A /* ExportService.swift */,
 				1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */,
 				126525A52F752AA800C12568 /* AppleSignInManager.swift */,
+				CC0000002FA0000000000001 /* ConstellationView.swift */,
 			);
 			path = Structure;
 			sourceTree = "<group>";
@@ -242,12 +245,13 @@
 				121342F22F50461B00B85F30 /* DataBase.swift in Sources */,
 				121247A72F5E9E6C006EA54A /* SceneComparisonView.swift in Sources */,
 				1212478B2F5E950D006EA54A /* ScreenTimelineNodeSidebar.swift in Sources */,
-				12E075742F55DB0600D8F380 /* float16_model.mlpackage in Sources */,
 				124A08C42F547D720070504C /* Embeddingservice.swift in Sources */,
 				1212476D2F5D61CC006EA54A /* ProjectSearchView.swift in Sources */,
 				124A08C62F547E0E0070504C /* Search.swift in Sources */,
 				121343052F505E8C00B85F30 /* ScreenplayWorkspaceView.swift in Sources */,
+				129AF68B2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage in Sources */,
 				12E074FD2F54966800D8F380 /* Quicksearch.swift in Sources */,
+				CC0000012FA0000000000001 /* ConstellationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,10 +383,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Impulse/Impulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = Q2Q3NCZVVU;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
@@ -416,7 +419,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Neuron.Impulse;
+				PRODUCT_BUNDLE_IDENTIFIER = Leap.Impulse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -439,10 +442,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Impulse/Impulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = Q2Q3NCZVVU;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
@@ -476,7 +478,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Neuron.Impulse;
+				PRODUCT_BUNDLE_IDENTIFIER = Leap.Impulse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
