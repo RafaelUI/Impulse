@@ -1,6 +1,8 @@
 import Foundation
 import CoreML
 import Combine
+import NaturalLanguage
+import Tokenizers
 
 // MARK: - Search Result
 
@@ -45,6 +47,14 @@ enum SearchResultType: String {
     }
 }
 
+// MARK: - Chunking
+
+/// A text chunk produced by sentence-aware chunking. Carries its position within the parent.
+struct ChunkWithParent {
+    let chunkText: String
+    let chunkIndex: Int
+}
+
 // MARK: - Search Mode
 
 enum SearchMode: String, CaseIterable {
@@ -59,14 +69,18 @@ final class EmbeddingService: ObservableObject {
 
     static let shared = EmbeddingService()
 
-    private var model: LiteraryMiniLM?
-    private var vocab: [String: Int] = [:]
+    private var model: MLModel?
+    private var tokenizer: Tokenizer?
 
-    private let maxLength = 128
-    private let clsToken  = 101
-    private let sepToken  = 102
-    private let padToken  = 0
-    private let unkToken  = 100
+    /// Tunable cutoff. The current model is trained on ultrahard negatives, so it is
+    /// very sharp (one strong match, everything else far below). Recalibrate after
+    /// retraining on easy+hard negatives. Centralized here = one-line change.
+    static let semanticThreshold: Float = 0.2
+    private let seqLen   = 600                       // CoreML input is fixed [1,600]
+    private let padToken = 0                         // <pad>
+    private let eosToken = 1                         // <eos> — last-token pooling target
+    private let bosToken = 2                         // <bos>
+    private let queryPrefix = "Instruct: Retrieve semantically similar text\nQuery: "
 
     @Published var isReady = false
     @Published var isSearching = false
@@ -77,31 +91,43 @@ final class EmbeddingService: ObservableObject {
 
     private func load() async {
         let loadedMLModel: MLModel? = await Task.detached(priority: .background) {
-            guard let url = Bundle.main.url(forResource: "LiteraryMiniLM", withExtension: "mlmodelc")
-                         ?? Bundle.main.url(forResource: "LiteraryMiniLM", withExtension: "mlpackage") else {
+            guard let url = Bundle.main.url(forResource: "harrier_literary", withExtension: "mlmodelc")
+                         ?? Bundle.main.url(forResource: "harrier_literary", withExtension: "mlpackage") else {
+                print("🔎HARRIER load: model NOT FOUND in bundle")
                 return nil
             }
+            print("🔎HARRIER load: model url = \(url.lastPathComponent)")
             let config = MLModelConfiguration()
-            config.computeUnits = .all
-            return try? MLModel(contentsOf: url, configuration: config)
+            config.computeUnits = .cpuAndNeuralEngine
+            do { return try MLModel(contentsOf: url, configuration: config) }
+            catch { print("🔎HARRIER load: MLModel init error = \(error)"); return nil }
         }.value
-        let loadedModel: LiteraryMiniLM? = loadedMLModel.map { LiteraryMiniLM(model: $0) }
+        let loadedModel: MLModel? = loadedMLModel
 
-        guard let vocabURL = Bundle.main.url(forResource: "vocab", withExtension: "txt"),
-              let content = try? String(contentsOf: vocabURL, encoding: .utf8) else {
-            return
-            return
-        }
-
-        var loadedVocab: [String: Int] = [:]
-        for (index, line) in content.components(separatedBy: "\n").enumerated() {
-            let token = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !token.isEmpty { loadedVocab[token] = index }
-        }
+        var loadedTokenizer: Tokenizer?
+                do {
+                    guard let cfgURL  = Bundle.main.url(forResource: "harrier_tokenizer_config", withExtension: "json"),
+                          let dataURL = Bundle.main.url(forResource: "harrier_tokenizer", withExtension: "json") else {
+                        print("🔎HARRIER load: tokenizer json NOT FOUND (проверь Copy Bundle Resources, не Compile Sources)")
+                        throw CocoaError(.fileNoSuchFile)
+                    }
+                    // Переиспользуем рабочий from(modelFolder:): складываем оба файла во временную
+                    // папку под именами, которые он ждёт.
+                    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("HarrierTok", isDirectory: true)
+                    try? FileManager.default.removeItem(at: dir)
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    try FileManager.default.copyItem(at: cfgURL,  to: dir.appendingPathComponent("tokenizer_config.json"))
+                    try FileManager.default.copyItem(at: dataURL, to: dir.appendingPathComponent("tokenizer.json"))
+                    loadedTokenizer = try await AutoTokenizer.from(modelFolder: dir)
+                    print("🔎HARRIER load: tokenizer loaded via staged folder")
+                } catch {
+                    print("🔎HARRIER load: tokenizer error = \(error)")
+                }
 
         self.model = loadedModel
-        self.vocab = loadedVocab
-        self.isReady = loadedModel != nil
+        self.tokenizer = loadedTokenizer
+        self.isReady = (loadedModel != nil && loadedTokenizer != nil)
+        print("🔎HARRIER load done: model=\(loadedModel != nil) tokenizer=\(loadedTokenizer != nil) isReady=\(self.isReady)")
 
     }
 
@@ -260,127 +286,95 @@ final class EmbeddingService: ObservableObject {
         return results.sorted { $0.score > $1.score }
     }
 
-    // MARK: - Semantic Chapter Search (sliding window по тексту глав)
-    //
-    // Делит текст главы на перекрывающиеся куски по chunkSize токенов,
-    // считает эмбеддинг каждого куска и берёт максимальную схожесть.
-    // Результаты отдаёт через AsyncStream — по одной главе за раз,
-    // чтобы UI мог показывать их прогрессивно.
+    // MARK: - Semantic Chapter Search
 
     func semanticChapterSearch(
         query: String,
         chapters: [Chapter],
-        threshold: Float = 0.30,
+        threshold: Float = EmbeddingService.semanticThreshold,
         onResult: @escaping (SearchResult) -> Void
     ) async {
         guard isReady else { return }
-        guard let queryEmbedding = embed(text: query) else { return }
-
-        let chunkSize   = 100   // токены на кусок (оставляем запас до 128)
-        let chunkOverlap = 20   // перекрытие между кусками
+        guard let queryEmbedding = embed(text: query, isQuery: true) else { print("🔎HARRIER query embed FAILED (isReady=\(isReady))"); return }
 
         for chapter in chapters {
-            // Не ищем семантически по главам без текста — только название даёт ненадёжные скоры
             guard !chapter.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let fullText = [chapter.title, chapter.text]
-                .filter { !$0.isEmpty }.joined(separator: " ")
+            let fullText = [chapter.title, chapter.text].filter { !$0.isEmpty }.joined(separator: " ")
             guard !fullText.isEmpty else { continue }
 
-            // Токенизируем весь текст один раз — используем слова как единицу разбивки
-            let words = fullText.lowercased()
-                .components(separatedBy: .whitespacesAndNewlines)
-                .filter { !$0.isEmpty }
+            // Sentence-aware chunking with overlap
+            let chunks = chunkText(fullText)
+            guard !chunks.isEmpty else { continue }
 
-            guard !words.isEmpty else { continue }
-
-            // Строим куски слов и считаем эмбеддинг каждого
             var bestScore: Float = 0
-            let stride = max(chunkSize - chunkOverlap, 1)
-            var start = 0
+            var bestChunkText = ""
 
-            while start < words.count {
-                let end = min(start + chunkSize, words.count)
-                let chunkWords = words[start..<end]
-                let chunkText = chunkWords.joined(separator: " ")
-
-                if let chunkEmb = embed(text: chunkText) {
-                    let score = cosineSimilarity(queryEmbedding, chunkEmb)
-                    if score > bestScore { bestScore = score }
+            for chunk in chunks {
+                guard let chunkEmb = embed(text: chunk.chunkText) else { continue }
+                let score = cosineSimilarity(queryEmbedding, chunkEmb)
+                if score > bestScore {
+                    bestScore = score
+                    bestChunkText = chunk.chunkText
                 }
-
-                if end == words.count { break }
-                start += stride
             }
 
+            print("🔎HARRIER bestScore=\(bestScore) (threshold \(threshold))")
             if bestScore > threshold {
-                let result = SearchResult(
+                // Small-to-Big: matched via chunk, return parent chapter; chunk text is the snippet
+                onResult(SearchResult(
                     type: .chapter,
                     title: chapter.title.isEmpty ? "Без названия" : chapter.title,
-                    snippet: makeSnippet(from: chapter.text, query: query),
+                    snippet: String(bestChunkText.prefix(150)),
                     score: bestScore,
                     chapter: chapter
-                )
-                onResult(result)
+                ))
             }
 
-            // Даём UI шанс обновиться между главами
             await Task.yield()
         }
     }
 
-    // MARK: - Semantic Scene Search (sliding window по тексту вариаций сцен)
+    // MARK: - Semantic Scene Search
 
     func semanticSceneSearch(
         query: String,
         scenes: [ScreenScene],
-        threshold: Float = 0.18,
+        threshold: Float = EmbeddingService.semanticThreshold,
         onResult: @escaping (SearchResult) -> Void
     ) async {
         guard isReady else { return }
-        guard let queryEmbedding = embed(text: query) else { return }
-
-        let chunkSize    = 100
-        let chunkOverlap = 20
-        let stride       = max(chunkSize - chunkOverlap, 1)
+        guard let queryEmbedding = embed(text: query, isQuery: true) else { print("🔎HARRIER query embed FAILED (isReady=\(isReady))"); return }
 
         for scene in scenes {
-            // Объединяем тексты всех вариаций для полноты поиска
             let variationTexts = scene.variations.map { $0.text }.filter { !$0.isEmpty }
-            let fullText = ([scene.title] + variationTexts)
-                .filter { !$0.isEmpty }.joined(separator: " ")
+            let fullText = ([scene.title] + variationTexts).filter { !$0.isEmpty }.joined(separator: " ")
             guard !fullText.isEmpty else { continue }
 
-            let words = fullText.lowercased()
-                .components(separatedBy: .whitespacesAndNewlines)
-                .filter { !$0.isEmpty }
-            guard !words.isEmpty else { continue }
+            let chunks = chunkText(fullText)
+            guard !chunks.isEmpty else { continue }
 
             var bestScore: Float = 0
-            var start = 0
+            var bestChunkText = ""
 
-            while start < words.count {
-                let end = min(start + chunkSize, words.count)
-                let chunkText = words[start..<end].joined(separator: " ")
-
-                if let chunkEmb = embed(text: chunkText) {
-                    let score = cosineSimilarity(queryEmbedding, chunkEmb)
-                    if score > bestScore { bestScore = score }
+            for chunk in chunks {
+                guard let chunkEmb = embed(text: chunk.chunkText) else { continue }
+                let score = cosineSimilarity(queryEmbedding, chunkEmb)
+                if score > bestScore {
+                    bestScore = score
+                    bestChunkText = chunk.chunkText
                 }
-
-                if end == words.count { break }
-                start += stride
             }
 
+            print("🔎HARRIER bestScore=\(bestScore) (threshold \(threshold))")
             if bestScore > threshold {
-                let snippetSource = variationTexts.first ?? ""
-                let result = SearchResult(
+                // Small-to-Big: matched via chunk, return parent scene
+                onResult(SearchResult(
                     type: .scene,
                     title: scene.title.isEmpty ? "Без названия" : scene.title,
-                    snippet: makeSnippet(from: snippetSource, query: query),
+                    snippet: String(bestChunkText.prefix(150)),
                     score: bestScore,
                     scene: scene
-                )
-                onResult(result)
+                ))
             }
 
             await Task.yield()
@@ -391,20 +385,29 @@ final class EmbeddingService: ObservableObject {
 
     func semanticSearch(query: String, in project: WritingProject) async -> [SearchResult] {
         guard isReady else { return [] }
-        guard let queryEmbedding = embed(text: query) else { return [] }
+        guard let queryEmbedding = embed(text: query, isQuery: true) else { return [] }
 
         var results: [SearchResult] = []
 
         for chapter in project.chapters ?? [] {
             let text = [chapter.title, chapter.text].filter { !$0.isEmpty }.joined(separator: " ")
-            guard !text.isEmpty, let emb = embed(text: text) else { continue }
-            let score = cosineSimilarity(queryEmbedding, emb)
-            if score > 0.20 {
+            guard !text.isEmpty else { continue }
+
+            let chunks = chunkText(text)
+            var bestScore: Float = 0
+            var bestChunkText = ""
+            for chunk in chunks {
+                guard let emb = embed(text: chunk.chunkText) else { continue }
+                let score = cosineSimilarity(queryEmbedding, emb)
+                if score > bestScore { bestScore = score; bestChunkText = chunk.chunkText }
+            }
+
+            if bestScore > EmbeddingService.semanticThreshold {
                 results.append(SearchResult(
                     type: .chapter,
                     title: chapter.title.isEmpty ? "Без названия" : chapter.title,
-                    snippet: makeSnippet(from: chapter.text, query: query),
-                    score: score,
+                    snippet: String(bestChunkText.prefix(150)),
+                    score: bestScore,
                     chapter: chapter
                 ))
             }
@@ -416,7 +419,7 @@ final class EmbeddingService: ObservableObject {
                 .filter { !$0.isEmpty }.joined(separator: " ")
             guard !text.isEmpty, let emb = embed(text: text) else { continue }
             let score = cosineSimilarity(queryEmbedding, emb)
-            if score > 0.20 {
+            if score > EmbeddingService.semanticThreshold {
                 let snippet = [character.role, character.biography].first(where: { !$0.isEmpty }) ?? ""
                 results.append(SearchResult(
                     type: .character,
@@ -504,102 +507,114 @@ final class EmbeddingService: ObservableObject {
         return (score, bestSnippet)
     }
 
-    // MARK: - Embedding
+    // MARK: - Sentence-Aware Chunking with Overlap
 
-    private func embed(text: String) -> [Float]? {
-        guard let model else { return nil }
-        let tokens = tokenize(text: text)
-        guard !tokens.inputIDs.isEmpty else { return nil }
-        guard let inputIDs = makeMultiArray(tokens.inputIDs),
-              let attnMask = makeMultiArray(tokens.attentionMask) else { return nil }
-        let input = LiteraryMiniLMInput(input_ids: inputIDs, attention_mask: attnMask)
-        guard let output = try? model.prediction(input: input) else { return nil }
-        let emb = output.embeddings
-        var result = [Float](repeating: 0, count: emb.count)
-        for i in 0..<emb.count { result[i] = emb[i].floatValue }
+    /// Public API: splits `text` into sentence-aware chunks with ~30-token overlap between neighbors.
+    func chunkText(_ text: String) -> [ChunkWithParent] {
+        chunkBySentences(text)
+    }
+
+    private func chunkBySentences(
+        _ text: String,
+        maxContentTokens: Int = 480,
+        overlapBudget: Int = 64
+    ) -> [ChunkWithParent] {
+        let nlTokenizer = NLTokenizer(unit: .sentence)
+        nlTokenizer.string = text
+
+        var sentences: [String] = []
+        nlTokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let s = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !s.isEmpty { sentences.append(s) }
+            return true
+        }
+
+        guard !sentences.isEmpty else {
+            return text.isEmpty ? [] : [ChunkWithParent(chunkText: text, chunkIndex: 0)]
+        }
+
+        var result: [ChunkWithParent] = []
+        var windowSentences: [String] = []
+        var windowTokens = 0
+
+        for sentence in sentences {
+            let st = tokenCount(sentence)
+
+            if windowTokens + st > maxContentTokens, !windowSentences.isEmpty {
+                // Flush the current window
+                result.append(ChunkWithParent(
+                    chunkText: windowSentences.joined(separator: " "),
+                    chunkIndex: result.count
+                ))
+                // Build overlap: take trailing sentences up to overlapBudget tokens
+                var overlap: [String] = []
+                var overlapTokens = 0
+                for s in windowSentences.reversed() {
+                    let t = tokenCount(s)
+                    guard overlapTokens + t <= overlapBudget else { break }
+                    overlap.insert(s, at: 0)
+                    overlapTokens += t
+                }
+                windowSentences = overlap
+                windowTokens = overlapTokens
+            }
+
+            windowSentences.append(sentence)
+            windowTokens += st
+        }
+
+        if !windowSentences.isEmpty {
+            result.append(ChunkWithParent(
+                chunkText: windowSentences.joined(separator: " "),
+                chunkIndex: result.count
+            ))
+        }
+
         return result
     }
-    // MARK: - Токенайзер
 
-    private struct TokenizerOutput {
-        var inputIDs: [Int]
-        var attentionMask: [Int]
-        var tokenTypeIDs: [Int]
+    /// Token count for chunk-sizing purposes — uses the real Gemma tokenizer.
+    private func tokenCount(_ text: String) -> Int {
+        tokenizer?.encode(text: text).count ?? text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
-    private func tokenize(text: String) -> TokenizerOutput {
-        let words = text.lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
+    // MARK: - Embedding
 
-        var ids: [Int] = [clsToken]
-        for word in words {
-            let pieces = wordPiece(word: word)
-            // Оставляем место для [SEP]: максимум maxLength - 1 токенов перед добавлением
-            if ids.count + pieces.count > maxLength - 1 {
-                // Добавляем только то, что влезает
-                let remaining = (maxLength - 1) - ids.count
-                if remaining > 0 { ids.append(contentsOf: pieces.prefix(remaining)) }
-                break
-            }
-            ids.append(contentsOf: pieces)
+    private func embed(text: String, isQuery: Bool = false) -> [Float]? {
+        guard let model, let tokenizer else { print("🔎HARRIER embed: model/tokenizer nil"); return nil }
+        let prepared = isQuery ? (queryPrefix + text) : text
+        var ids = tokenizer.encode(text: prepared)          // adds <bos> … <eos>
+        guard !ids.isEmpty else { return nil }
+        // Truncate but keep the trailing <eos> (the pooled position)
+        if ids.count > seqLen { ids = Array(ids.prefix(seqLen - 1)) + [eosToken] }
+        // LEFT padding: the model pools the FIXED last index, so real text must end at seqLen-1
+        let padCount = seqLen - ids.count
+        let inputIDs = [Int](repeating: padToken, count: padCount) + ids
+        let mask     = [Int](repeating: 0, count: padCount) + [Int](repeating: 1, count: ids.count)
+        guard let idsArr = makeMultiArray(inputIDs), let maskArr = makeMultiArray(mask) else {
+            print("🔎HARRIER embed: makeMultiArray failed"); return nil
         }
-        ids.append(sepToken)
-        // Гарантируем точный размер maxLength
-        ids = Array(ids.prefix(maxLength))
-
-        let realLength = ids.count
-        while ids.count < maxLength { ids.append(padToken) }
-
-        let mask  = (0..<maxLength).map { $0 < realLength ? 1 : 0 }
-        let types = [Int](repeating: 0, count: maxLength)
-        return TokenizerOutput(inputIDs: ids, attentionMask: mask, tokenTypeIDs: types)
-    }
-
-    private func wordPiece(word: String) -> [Int] {
-        if let id = vocab[word] { return [id] }
-        var tokens: [Int] = []
-        var remaining = word
-        while !remaining.isEmpty {
-            var found = false
-            let prefix = tokens.isEmpty ? "" : "##"
-            for length in stride(from: remaining.count, through: 1, by: -1) {
-                let candidate = prefix + String(remaining.prefix(length))
-                if let id = vocab[candidate] {
-                    tokens.append(id)
-                    remaining = String(remaining.dropFirst(length))
-                    found = true
-                    break
-                }
+        do {
+            let provider = try MLDictionaryFeatureProvider(
+                dictionary: ["input_ids": idsArr, "attention_mask": maskArr])
+            let output = try model.prediction(from: provider)
+            guard let emb = output.featureValue(for: "embedding")?.multiArrayValue else {
+                print("🔎HARRIER embed: no 'embedding' output feature"); return nil
             }
-            if !found { tokens.append(unkToken); break }
+            var result = [Float](repeating: 0, count: emb.count)
+            for i in 0..<emb.count { result[i] = emb[i].floatValue }
+            return result
+        } catch {
+            print("🔎HARRIER embed PREDICTION ERROR: \(error)")
+            return nil
         }
-        return tokens
     }
+    // MARK: - CoreML input helper
 
     private func makeMultiArray(_ values: [Int]) -> MLMultiArray? {
-        guard let arr = try? MLMultiArray(shape: [1, NSNumber(value: maxLength)], dataType: .int32) else { return nil }
-        for (i, v) in values.prefix(maxLength).enumerated() { arr[i] = NSNumber(value: Int32(v)) }
+        guard let arr = try? MLMultiArray(shape: [1, NSNumber(value: seqLen)], dataType: .int32) else { return nil }
+        for (i, v) in values.prefix(seqLen).enumerated() { arr[i] = NSNumber(value: Int32(v)) }
         return arr
-    }
-
-    private func meanPool(_ multiArray: MLMultiArray, mask: [Int]) -> [Float] {
-        let shape = multiArray.shape
-        guard shape.count == 3 else { return [] }
-        let seqLen = shape[1].intValue, hiddenSize = shape[2].intValue
-        var result = [Float](repeating: 0, count: hiddenSize)
-        var count: Float = 0
-        for t in 0..<min(seqLen, mask.count) where mask[t] == 1 {
-            for h in 0..<hiddenSize { result[h] += multiArray[t * hiddenSize + h].floatValue }
-            count += 1
-        }
-        if count > 0 { result = result.map { $0 / count } }
-        return normalize(result)
-    }
-
-    private func normalize(_ v: [Float]) -> [Float] {
-        let norm = sqrt(v.reduce(0) { $0 + $1 * $1 })
-        return norm > 0 ? v.map { $0 / norm } : v
     }
 
     private func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {

@@ -70,18 +70,32 @@ private func orbitalLayout(nodes: [ConstellationNode]) -> [ConstellationNode] {
 struct ConstellationView: View {
     let query: String
     let nodes: [ConstellationNode]
+    /// 0…1 fraction of LM processing complete. Default 1.0 = time-only gating.
+    var processingProgress: Float = 1.0
+    var isProcessing: Bool = false
     var onSelect: (ConstellationNode) -> Void = { _ in }
 
     @State private var panOffset: CGSize = .zero
     @State private var dragBase:  CGSize = .zero
-    @State private var scale:     CGFloat = 1.0
-    @State private var scaleBase: CGFloat = 1.0
+    @State private var scale:     CGFloat = 1.3
+    @State private var scaleBase: CGFloat = 1.3
 
-    @State private var laid:      [ConstellationNode] = []
-    @State private var viewSize:  CGSize = .zero
-    @State private var hoveredID: UUID?  = nil
-    @State private var appeared:  Bool   = false
-    @State private var animStart: Double = 0
+    @State private var laid:             [ConstellationNode] = []
+    @State private var viewSize:         CGSize = .zero
+    @State private var hoveredID:        UUID?  = nil
+    @State private var appeared:         Bool   = false
+    @State private var animStart:        Double = 0
+
+    @State private var queryActive:      Bool   = false
+    @State private var queryLitAt:       Double = 0
+    @State private var queryLightTask:   Task<Void, Never>? = nil
+    @State private var animScheduleTask: Task<Void, Never>? = nil
+
+    // Return animation (planets fly back to centre)
+    @State private var isReturning:  Bool   = false
+    @State private var returnStart:  Double = 0
+    @State private var returnTask:   Task<Void, Never>? = nil
+    @State private var returnNodes:  [ConstellationNode] = []  // snapshot for return draw
 
     // MARK: Body
 
@@ -114,7 +128,7 @@ struct ConstellationView: View {
             .onAppear {
                 viewSize = geo.size
                 relayout(geo.size)
-                startAnimation()
+                // Анимация только через maybeScheduleAnimation — не здесь
             }
             .onChange(of: geo.size) { _, s in
                 viewSize = s
@@ -122,7 +136,37 @@ struct ConstellationView: View {
             }
             .onChange(of: nodes) { _, _ in
                 relayout(viewSize)
-                startAnimation()
+                // startAnimation deferred until queryNode is fully lit
+            }
+            .onChange(of: isProcessing) { _, processing in
+                if !processing { maybeScheduleAnimation() }
+            }
+            .onChange(of: query) { _, new in
+                queryLightTask?.cancel()
+                animScheduleTask?.cancel()
+                let trimmed = new.trimmingCharacters(in: .whitespaces)
+
+                // Обратная анимация только если планеты сейчас видны.
+                // Если уже идёт возврат (isReturning) — не перезапускаем, даём доиграть.
+                if appeared {
+                    startReturn()
+                }
+
+                // Точка всегда гаснет при смене / очистке запроса
+                queryActive = false
+                queryLitAt  = 0
+
+                guard !trimmed.isEmpty else { return }
+
+                queryLightTask = Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        queryLitAt  = Date().timeIntervalSinceReferenceDate
+                        queryActive = true
+                        maybeScheduleAnimation()
+                    }
+                }
             }
         }
         .gesture(
@@ -159,12 +203,55 @@ struct ConstellationView: View {
     // MARK: - Animation
 
     private func startAnimation() {
+        // Если шла обратная анимация — прерываем её
+        returnTask?.cancel()
+        isReturning = false
+        returnStart = 0
+        returnNodes = []
+
         appeared  = false
         animStart = 0
         Task {
             await Task.yield()
             animStart = Date().timeIntervalSinceReferenceDate
             appeared  = true
+        }
+    }
+
+    // Fires startAnimation after the node is fully lit (min 2 s) + 1 s for pulsing onset.
+    private func maybeScheduleAnimation() {
+        guard queryActive, queryLitAt > 0, !isProcessing else { return }
+        animScheduleTask?.cancel()
+        let elapsed = Date().timeIntervalSinceReferenceDate - queryLitAt
+        // Wait until 2 s have elapsed since light-up start, then 1 s more before planets fly in
+        let delay = max(0, 2.0 - elapsed) + 1.0
+        animScheduleTask = Task {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, queryActive else { return }
+            await MainActor.run { startAnimation() }
+        }
+    }
+
+    // Запускает анимацию возврата планет к центральной точке.
+    // Вызывать только когда appeared=true.
+    private func startReturn() {
+        returnTask?.cancel()
+        returnNodes = laid  // снимок позиций на момент старта
+        isReturning = true
+        returnStart = Date().timeIntervalSinceReferenceDate
+        appeared    = false
+        animStart   = 0
+
+        let duration = 0.4 + Double(returnNodes.count) * 0.03
+        returnTask = Task {
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                isReturning = false
+                returnStart = 0
+                returnNodes = []
+                // laid не трогаем — к этому моменту там уже могут быть новые результаты
+            }
         }
     }
 
@@ -182,18 +269,12 @@ struct ConstellationView: View {
 
     private func rings(_ ctx: inout GraphicsContext) {
         let total = kMaxOrbit + kMinOrbit
-        for (f, label) in [(CGFloat(0.70), "близко"), (CGFloat(0.90), "далеко")] {
+        for f in [CGFloat(0.70), CGFloat(0.90)] {
             let r = total * f
             ctx.stroke(
                 Path(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2)),
                 with: .color(Color("SecondaryText").opacity(0.12)),
                 style: StrokeStyle(lineWidth: 0.5, dash: [4, 10])
-            )
-            ctx.draw(
-                Text(label)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Color("SecondaryText").opacity(0.25)),
-                at: CGPoint(x: r + 8, y: 0)
             )
         }
     }
@@ -201,6 +282,19 @@ struct ConstellationView: View {
     // MARK: - Draw: Edges
 
     private func edges(_ ctx: inout GraphicsContext, t: Double) {
+        // Обратная анимация
+        if isReturning, returnStart > 0 {
+            let prog = CGFloat(min((t - returnStart) / 0.3, 1.0))
+            for n in returnNodes where n.score > 0.5 {
+                let end = CGPoint(x: n.position.x * (1 - prog), y: n.position.y * (1 - prog))
+                var p = Path(); p.move(to: .zero); p.addLine(to: end)
+                ctx.stroke(p,
+                    with: .color(nodeColor(for: n.type).opacity(Double(n.score) * 0.38 * Double(1 - prog))),
+                    style: StrokeStyle(lineWidth: 0.6))
+            }
+            return
+        }
+
         guard appeared, animStart > 0 else { return }
         let elapsed = t - animStart
 
@@ -219,6 +313,35 @@ struct ConstellationView: View {
     // MARK: - Draw: Result Nodes
 
     private func resultNodes(_ ctx: inout GraphicsContext, t: Double) {
+        // Обратная анимация — планеты летят к центру
+        if isReturning, returnStart > 0 {
+            let elapsed = t - returnStart
+            let count = returnNodes.count
+            for (i, n) in returnNodes.enumerated() {
+                // Внешние планеты летят первыми (обратный порядок)
+                let ri    = count - 1 - i
+                let delay = Double(ri) * 0.03
+                let prog  = CGFloat(min(springEase(max(0, elapsed - delay) / 0.35), 1.0))
+                let fade  = 1.0 - prog
+                guard fade > 0.01 else { continue }
+                let pos  = CGPoint(x: n.position.x * (1 - prog), y: n.position.y * (1 - prog))
+                let r    = nodeR(n.score)
+                let col  = nodeColor(for: n.type)
+                ctx.fill(Path(ellipseIn: box(pos, r)),
+                    with: .color(col.opacity(0.85 * Double(fade))))
+                ctx.stroke(Path(ellipseIn: box(pos, r)),
+                    with: .color(.white.opacity(0.18 * Double(fade))), lineWidth: 0.75)
+                if fade > 0.4 {
+                    ctx.draw(
+                        Text(n.chapter)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.72 * Double(fade))),
+                        at: CGPoint(x: pos.x, y: pos.y + r + 11))
+                }
+            }
+            return
+        }
+
         guard appeared, animStart > 0 else { return }
         let elapsed = t - animStart
 
@@ -276,39 +399,45 @@ struct ConstellationView: View {
     // MARK: - Draw: Query Node
 
     private func queryNode(_ ctx: inout GraphicsContext, t: Double) {
-        let pulse = CGFloat(sin(t * 2.0) * 0.5 + 0.5)
-        let qr: CGFloat = 16 + pulse * 5
+        // brightness = min(LM progress, elapsed/2s) → can't exceed either gate
+        let brightness: CGFloat = {
+            guard queryActive, queryLitAt > 0 else { return 0 }
+            let timeFrac = CGFloat(min((t - queryLitAt) / 2.0, 1.0))
+            let progFrac = CGFloat(processingProgress)
+            return min(timeFrac, progFrac)
+        }()
 
-        // Outer glow: opacity 0.15, radius * 3
+        // Dim state — static muted dot
+        if brightness < 0.01 {
+            ctx.fill(Path(ellipseIn: box(.zero, 12)),
+                with: .color(Color("AccentColor").opacity(0.18)))
+            ctx.stroke(Path(ellipseIn: box(.zero, 12)),
+                with: .color(.white.opacity(0.10)), lineWidth: 1)
+            return
+        }
+
+        // Pulse only once fully lit; scales with brightness so it fades in
+        let pulse = CGFloat(sin(t * 2.0) * 0.5 + 0.5) * brightness
+        // Core radius expands from 12 (dim) outward as brightness grows
+        let qr: CGFloat = 12 + brightness * (2 + pulse * 5)
+
+        // Outer glow — expands outward from the dim dot radius
         var gc1 = ctx
         gc1.addFilter(.blur(radius: 10))
-        gc1.fill(Path(ellipseIn: box(.zero, qr * 3)),
-            with: .color(Color("AccentColor").opacity(0.15 + Double(pulse) * 0.05)))
+        gc1.fill(Path(ellipseIn: box(.zero, 12 + brightness * (qr * 3 - 12))),
+            with: .color(Color("AccentColor").opacity((0.15 + Double(pulse) * 0.05) * Double(brightness))))
 
-        // Inner glow: opacity 0.35, radius * 1.5
+        // Inner glow
         var gc2 = ctx
         gc2.addFilter(.blur(radius: 5))
-        gc2.fill(Path(ellipseIn: box(.zero, qr * 1.5)),
-            with: .color(Color("AccentColor").opacity(0.35 + Double(pulse) * 0.10)))
-
-        // Pulse ring
-        ctx.stroke(Path(ellipseIn: box(.zero, qr + 6 + pulse * 10)),
-            with: .color(Color("AccentColor").opacity(0.10 + Double(pulse) * 0.12)),
-            style: StrokeStyle(lineWidth: 1, dash: [3, 6]))
+        gc2.fill(Path(ellipseIn: box(.zero, 12 + brightness * (qr * 1.5 - 12))),
+            with: .color(Color("AccentColor").opacity((0.35 + Double(pulse) * 0.10) * Double(brightness))))
 
         // Core
-        ctx.fill(Path(ellipseIn: box(.zero, qr)), with: .color(Color("AccentColor")))
+        ctx.fill(Path(ellipseIn: box(.zero, qr)),
+            with: .color(Color("AccentColor").opacity(0.2 + 0.8 * Double(brightness))))
         ctx.stroke(Path(ellipseIn: box(.zero, qr)),
-            with: .color(.white.opacity(0.5)), lineWidth: 1.5)
-
-        let disp = query.count > 20 ? String(query.prefix(18)) + "…" : query
-        if !disp.isEmpty {
-            ctx.draw(
-                Text(disp)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white),
-                at: .zero)
-        }
+            with: .color(.white.opacity(0.5 * Double(brightness))), lineWidth: 1.5)
     }
 
     // MARK: - Layout

@@ -139,8 +139,12 @@ struct SearchView: View {
                 }
 
             } else {
-                ConstellationView(query: query, nodes: constellationNodes,
-                                  onSelect: handleConstellationSelect)
+                ConstellationView(
+                    query: query,
+                    nodes: constellationNodes,
+                    isProcessing: service.isSearching,
+                    onSelect: handleConstellationSelect
+                )
             }
         }
         .background(Color("PrimaryAccent"))

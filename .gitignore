@@ -1,1 +1,29 @@
+# === macOS ===
+.DS_Store
+
+# === Xcode ===
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.dSYM
+*.dSYM.zip
+
+# === Swift Package Manager ===
+.build/
+.swiftpm/
+# (Package.resolved намеренно НЕ игнорим — нужен для воспроизводимых зависимостей)
+
+# === ML-ассеты: восстанавливаются локально / из HuggingFace, в гит не идут ===
+Structure/LitNeuron/
 *.mlpackage
+*.mlmodelc
+
+# === Диагностика и бэкапы ===
+_parity/
+/ref.py
+*.bak

@@ -33,27 +33,69 @@ struct ImpulseApp: App {
             ScreenScene.self,
             ScreenRole.self,
         ])
-        let modelConfiguration = ModelConfiguration(
+        // Allow forcing a local-only store for diagnostics by setting the
+        // environment variable IMPULSE_FORCE_LOCAL_DB=1 (useful when CloudKit
+        // is causing corruption or you need to inspect data without syncing).
+        let forceLocal = ProcessInfo.processInfo.environment["IMPULSE_FORCE_LOCAL_DB"] == "1"
+
+        let cloudConfig = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
             cloudKitDatabase: .private("iCloud.Cloud.Impulse")
         )
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
 
-            // Фоллбэк: удалить старый store и пересоздать локально
-            // (это может произойти если схема изменилась и требует миграции)
-            let localConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            if let storeURL = localConfiguration.url as URL? {
-                try? FileManager.default.removeItem(at: storeURL)
-            }
+        let container: ModelContainer
+        if forceLocal {
+            // Create a local-only configuration (no CloudKit)
+            let localConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             do {
-                return try ModelContainer(for: schema, configurations: [localConfiguration])
+                container = try ModelContainer(for: schema, configurations: [localConfig])
             } catch {
-                fatalError("Не удалось создать ModelContainer: \(error)")
+                fatalError("Не удалось создать локальный ModelContainer: \(error)")
+            }
+        } else {
+            do {
+                container = try ModelContainer(for: schema, configurations: [cloudConfig])
+            } catch {
+                // CloudKit недоступен (нет сети, iCloud выключен) — открываем локально.
+                // НЕ удаляем store: данные пользователя должны оставаться нетронутыми.
+                let localConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+                do {
+                    container = try ModelContainer(for: schema, configurations: [localConfig])
+                } catch {
+                    fatalError("Не удалось создать ModelContainer: \(error)")
+                }
             }
         }
+
+        // Дедупликация проектов — запускается сразу после создания контейнера,
+        // до первого рендера любого View. Удаляет дубли WritingProject с одинаковым id UUID,
+        // которые могут появиться после сбоя CloudKit-синхронизации.
+        let ctx = container.mainContext
+        if let all = try? ctx.fetch(FetchDescriptor<WritingProject>()) {
+            var seen: [UUID: WritingProject] = [:]
+            var toDelete: [WritingProject] = []
+            for project in all {
+                if let existing = seen[project.id] {
+                    let existingScore = (existing.chapters?.count ?? 0) + (existing.scenes?.count ?? 0)
+                    let newScore      = (project.chapters?.count ?? 0)  + (project.scenes?.count ?? 0)
+                    if newScore > existingScore {
+                        toDelete.append(existing)
+                        seen[project.id] = project
+                    } else {
+                        toDelete.append(project)
+                    }
+                } else {
+                    seen[project.id] = project
+                }
+            }
+            if !toDelete.isEmpty {
+                toDelete.forEach { ctx.delete($0) }
+                try? ctx.save()
+            }
+        }
+
+        return container
     }()
 
     var body: some Scene {

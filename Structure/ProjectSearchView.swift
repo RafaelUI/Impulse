@@ -62,62 +62,39 @@ struct ProjectSearchView: View {
     @State private var semanticTotal: Int = 0
 
     // UI state
-    @State private var hasSearched = false
     @State private var showEmpty = false
     @State private var emptyDelayTask: Task<Void, Never>? = nil
-    @Namespace private var searchNS
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .top) {
-                Color("PrimaryAccent").ignoresSafeArea()
+        VStack(spacing: 0) {
+            searchFieldView
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
 
-                // ── Декор — исчезает по opacity, не перестраивает дерево ──
-                VStack(spacing: 10) {
-                    Image(systemName: "sparkle.magnifyingglass")
-                        .font(.system(size: 40))
-                        .foregroundStyle(Color("AccentColor").opacity(0.4))
-                    Text("Поиск по проекту")
-                        .font(.title2.weight(.medium))
-                        .foregroundStyle(Color("PrimaryText"))
-                }
-                .frame(maxWidth: .infinity)
-                .offset(y: geo.size.height / 2 - 190)
-                .opacity(hasSearched ? 0 : 1)
-                .allowsHitTesting(!hasSearched)
+            Divider()
 
-                // ── Результаты ──
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: 56)
-                    Divider()
-
-                    if showEmpty && semanticResults.isEmpty && !isSemanticRunning {
-                        ContentUnavailableView(
-                            "Ничего не найдено",
-                            systemImage: "doc.text.magnifyingglass",
-                            description: Text("Попробуйте другую формулировку")
-                        )
-                    } else {
-                        ConstellationView(query: query, nodes: constellationNodes, onSelect: { node in
-                            if let result = semanticResults.first(where: { $0.id == node.id }) {
-                                handleSelect(result)
-                            }
-                        })
-                        .transition(.opacity)
+            if showEmpty && semanticResults.isEmpty && !isSemanticRunning {
+                ContentUnavailableView(
+                    "Ничего не найдено",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text("Попробуйте другую формулировку")
+                )
+            } else {
+                ConstellationView(
+                    query: query,
+                    nodes: constellationNodes,
+                    processingProgress: semanticTotal > 0
+                        ? Float(semanticProgress) / Float(semanticTotal)
+                        : 1.0,
+                    isProcessing: isSemanticRunning,
+                    onSelect: { node in
+                        if let result = semanticResults.first(where: { $0.id == node.id }) {
+                            handleSelect(result)
+                        }
                     }
-                }
-                .opacity(hasSearched ? 1 : 0)
-                .allowsHitTesting(hasSearched)
-
-                // ── Строка поиска — ОДИН экземпляр, двигается через padding ──
-                searchFieldView
-                    .matchedGeometryEffect(id: "searchBar", in: searchNS)
-                    .frame(maxWidth: hasSearched ? .infinity : 520)
-                    .padding(.horizontal, 16)
-                    .padding(.top, hasSearched ? 10 : geo.size.height / 2 - 90)
+                )
             }
-            .animation(.spring(duration: 1.3, bounce: 0.08), value: hasSearched)
         }
         .background(Color("PrimaryAccent"))
     }
@@ -181,18 +158,13 @@ struct ProjectSearchView: View {
             return
         }
 
-        // Keyword — дебаунс 150ms, результаты сразу
+        // Keyword — дебаунс 150ms (только для showEmpty-детекции)
         keywordTask = Task {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
             let found = service.keywordSearch(query: trimmed, in: project)
                 .filter { scope.allowKeywordTypes.contains($0.type) }
-            await MainActor.run {
-                withAnimation(.spring(duration: 1.8, bounce: 0.15)) {
-                    keywordResults = found
-                    hasSearched = true
-                }
-            }
+            await MainActor.run { keywordResults = found }
         }
 
         // Semantic — после 400ms паузы
@@ -280,7 +252,6 @@ struct ProjectSearchView: View {
         keywordResults = []
         semanticResults = []
         isSemanticRunning = false
-        hasSearched = false
         showEmpty = false
     }
 

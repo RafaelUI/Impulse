@@ -14,7 +14,6 @@
 		1212478B2F5E950D006EA54A /* ScreenTimelineNodeSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1212478A2F5E950D006EA54A /* ScreenTimelineNodeSidebar.swift */; };
 		121247A72F5E9E6C006EA54A /* SceneComparisonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121247A62F5E9E6C006EA54A /* SceneComparisonView.swift */; };
 		121247A92F5EDA08006EA54A /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121247A82F5EDA08006EA54A /* ExportService.swift */; };
-		121247C62F60282E006EA54A /* tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = 121247C52F60282E006EA54A /* tokenizer.json */; };
 		121342F22F50461B00B85F30 /* DataBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121342F02F50461200B85F30 /* DataBase.swift */; };
 		121343052F505E8C00B85F30 /* ScreenplayWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121342FB2F5057B700B85F30 /* ScreenplayWorkspaceView.swift */; };
 		121343062F505E9100B85F30 /* NovelWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121342FA2F50578E00B85F30 /* NovelWorkspaceView.swift */; };
@@ -24,8 +23,9 @@
 		126525A62F752AA800C12568 /* AppleSignInManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126525A52F752AA800C12568 /* AppleSignInManager.swift */; };
 		126525A82F75353900C12568 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 126525A72F75353900C12568 /* PrivacyInfo.xcprivacy */; };
 		1267BBB62F654D5200867B1D /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */; };
-		129AF68B2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */; };
-		12E074FB2F54937400D8F380 /* vocab.txt in Resources */ = {isa = PBXBuildFile; fileRef = 12E074FA2F54937400D8F380 /* vocab.txt */; };
+		127F22782FE0D91900B3088E /* Hub in Frameworks */ = {isa = PBXBuildFile; productRef = 127F22772FE0D91900B3088E /* Hub */; };
+		127F227A2FE0D91900B3088E /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 127F22792FE0D91900B3088E /* Tokenizers */; };
+		127F227C2FE0D91900B3088E /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = 127F227B2FE0D91900B3088E /* Transformers */; };
 		12E074FD2F54966800D8F380 /* Quicksearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E074FC2F54965D00D8F380 /* Quicksearch.swift */; };
 		CC0000012FA0000000000001 /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000002FA0000000000001 /* ConstellationView.swift */; };
 /* End PBXBuildFile section */
@@ -39,7 +39,6 @@
 		121247A62F5E9E6C006EA54A /* SceneComparisonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneComparisonView.swift; sourceTree = "<group>"; };
 		121247A82F5EDA08006EA54A /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
 		121247C42F5EDB5A006EA54A /* Impulse.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Impulse.entitlements; sourceTree = "<group>"; };
-		121247C52F60282E006EA54A /* tokenizer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = tokenizer.json; sourceTree = "<group>"; };
 		121342E22F5045FE00B85F30 /* Impulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Impulse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		121342F02F50461200B85F30 /* DataBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataBase.swift; sourceTree = "<group>"; };
 		121342FA2F50578E00B85F30 /* NovelWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelWorkspaceView.swift; sourceTree = "<group>"; };
@@ -51,8 +50,6 @@
 		126525A52F752AA800C12568 /* AppleSignInManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInManager.swift; sourceTree = "<group>"; };
 		126525A72F75353900C12568 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
-		129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = LiteraryMiniLM.mlpackage; sourceTree = "<group>"; };
-		12E074FA2F54937400D8F380 /* vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = vocab.txt; sourceTree = "<group>"; };
 		12E074FC2F54965D00D8F380 /* Quicksearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quicksearch.swift; sourceTree = "<group>"; };
 		CC0000002FA0000000000001 /* ConstellationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConstellationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -68,6 +65,11 @@
 			path = BookWorkplace;
 			sourceTree = "<group>";
 		};
+		127F22992FE0DCC300B3088E /* LitNeuron */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LitNeuron;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +77,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				127F227C2FE0D91900B3088E /* Transformers in Frameworks */,
+				127F227A2FE0D91900B3088E /* Tokenizers in Frameworks */,
+				127F22782FE0D91900B3088E /* Hub in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,9 +113,6 @@
 			children = (
 				12232AAB2F602993001D8938 /* LanguageManager.swift */,
 				12E074FC2F54965D00D8F380 /* Quicksearch.swift */,
-				12E074FA2F54937400D8F380 /* vocab.txt */,
-				129AF68A2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage */,
-				121247C52F60282E006EA54A /* tokenizer.json */,
 				124A08C52F547E090070504C /* Search.swift */,
 				124A08C32F547D670070504C /* Embeddingservice.swift */,
 				121342F02F50461200B85F30 /* DataBase.swift */,
@@ -119,6 +121,7 @@
 				1267BBB52F654D5200867B1D /* KeyboardShortcuts.swift */,
 				126525A52F752AA800C12568 /* AppleSignInManager.swift */,
 				CC0000002FA0000000000001 /* ConstellationView.swift */,
+				127F22992FE0DCC300B3088E /* LitNeuron */,
 			);
 			path = Structure;
 			sourceTree = "<group>";
@@ -171,9 +174,13 @@
 			fileSystemSynchronizedGroups = (
 				121342E42F5045FE00B85F30 /* View */,
 				124C926A2F51E73A00F0B81D /* BookWorkplace */,
+				127F22992FE0DCC300B3088E /* LitNeuron */,
 			);
 			name = Impulse;
 			packageProductDependencies = (
+				127F22772FE0D91900B3088E /* Hub */,
+				127F22792FE0D91900B3088E /* Tokenizers */,
+				127F227B2FE0D91900B3088E /* Transformers */,
 			);
 			productName = Impulse;
 			productReference = 121342E22F5045FE00B85F30 /* Impulse.app */;
@@ -187,7 +194,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					121342E12F5045FE00B85F30 = {
 						CreatedOnToolsVersion = 26.2;
@@ -206,6 +213,9 @@
 			);
 			mainGroup = 121342D92F5045FE00B85F30;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				127F22762FE0D91900B3088E /* XCRemoteSwiftPackageReference "swift-transformers" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 121342E32F5045FE00B85F30 /* Products */;
 			projectDirPath = "";
@@ -222,9 +232,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1212476F2F5D6EA0006EA54A /* Localizable.xcstrings in Resources */,
-				121247C62F60282E006EA54A /* tokenizer.json in Resources */,
 				126525A82F75353900C12568 /* PrivacyInfo.xcprivacy in Resources */,
-				12E074FB2F54937400D8F380 /* vocab.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -249,7 +257,6 @@
 				1212476D2F5D61CC006EA54A /* ProjectSearchView.swift in Sources */,
 				124A08C62F547E0E0070504C /* Search.swift in Sources */,
 				121343052F505E8C00B85F30 /* ScreenplayWorkspaceView.swift in Sources */,
-				129AF68B2F9C7C1E00B99B60 /* LiteraryMiniLM.mlpackage in Sources */,
 				12E074FD2F54966800D8F380 /* Quicksearch.swift in Sources */,
 				CC0000012FA0000000000001 /* ConstellationView.swift in Sources */,
 			);
@@ -263,6 +270,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -292,6 +300,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = LRM75RG9P9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -316,6 +325,7 @@
 				MTL_FAST_MATH = YES;
 				NEW_SETTING = "";
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -326,6 +336,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -355,6 +366,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = LRM75RG9P9;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -372,6 +384,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				NEW_SETTING = "";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -384,6 +397,7 @@
 				CODE_SIGN_ENTITLEMENTS = Impulse/Impulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = Q2Q3NCZVVU;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -443,6 +457,7 @@
 				CODE_SIGN_ENTITLEMENTS = Impulse/Impulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = Q2Q3NCZVVU;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -516,6 +531,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		127F22762FE0D91900B3088E /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		127F22772FE0D91900B3088E /* Hub */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 127F22762FE0D91900B3088E /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Hub;
+		};
+		127F22792FE0D91900B3088E /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 127F22762FE0D91900B3088E /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
+		};
+		127F227B2FE0D91900B3088E /* Transformers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 127F22762FE0D91900B3088E /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Transformers;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 121342DA2F5045FE00B85F30 /* Project object */;
 }
