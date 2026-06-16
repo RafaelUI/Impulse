@@ -77,18 +77,13 @@ struct RichTextEditor: NSViewRepresentable {
             textView.textContainerInset = targetInset
         }
 
-        // Only reload content if the data changed externally
-        // (not from typing in this view — guard against feedback loop)
-        guard !context.coordinator.isEditing else { return }
-
-        let currentRTF = textView.textStorage.flatMap {
-            $0.rtf(from: NSRange(location: 0, length: $0.length),
-                   documentAttributes: [:])
-        } ?? Data()
-
-        if currentRTF != rtfData {
-            loadContent(into: textView)
-        }
+        // NOTE: содержимое НЕ перезагружаем по сравнению RTF-байтов.
+        // Сериализация RTF не идемпотентна (цветовые таблицы / нормализация
+        // атрибутов), из-за чего любое сравнение почти всегда давало "не равно"
+        // и триггерило перезагрузку, которая «запекала» чёрный цвет и сбрасывала
+        // шрифты. Идентичность документа теперь задаётся через .id(chapter.id)
+        // на уровне SwiftUI: при смене главы создаётся свежий NSTextView и
+        // makeNSView -> loadContent отрабатывает заново.
 
         // Обновляем подсветку поискового запроса если он изменился
         if context.coordinator.lastHighlightedQuery != searchQuery {
@@ -155,6 +150,28 @@ struct RichTextEditor: NSViewRepresentable {
         textView.typingAttributes[.font] = font
     }
 
+    /// Цвет текста редактора. Динамический системный/ассетный цвет, который
+    /// следует за светлой/тёмной темой. Намеренно НЕ хранится в RTF —
+    /// применяется только для отображения (см. applyTextColor / textDidChange).
+    private var displayTextColor: NSColor {
+        NSColor(named: "PrimaryText") ?? .labelColor
+    }
+
+    /// Принудительно проставляет цвет текста по всему содержимому и в
+    /// typingAttributes. Без этого RTF round-trip терял цвет и текст
+    /// становился чёрным (невидимым на тёмном фоне редактора).
+    private func applyTextColor(to textView: NSTextView) {
+        let color = displayTextColor
+        if let storage = textView.textStorage, storage.length > 0 {
+            storage.beginEditing()
+            storage.addAttribute(.foregroundColor, value: color,
+                                 range: NSRange(location: 0, length: storage.length))
+            storage.endEditing()
+        }
+        textView.typingAttributes[.foregroundColor] = color
+        textView.insertionPointColor = color
+    }
+
     private func loadContent(into textView: NSTextView) {
         if !rtfData.isEmpty,
            let attrStr = NSAttributedString(rtf: rtfData, documentAttributes: nil) {
@@ -173,6 +190,8 @@ struct RichTextEditor: NSViewRepresentable {
         } else {
             textView.string = ""
         }
+        // Цвет применяем поверх любого загруженного контента (и пустого тоже).
+        applyTextColor(to: textView)
     }
 
     // MARK: - Coordinator
@@ -207,9 +226,12 @@ struct RichTextEditor: NSViewRepresentable {
             // Extract plain text
             parent.plainText = storage.string
 
-            // Extract RTF
-            let range = NSRange(location: 0, length: storage.length)
-            if let rtf = storage.rtf(from: range, documentAttributes: [:]) {
+            // Extract RTF БЕЗ цвета текста, чтобы он не "запекался" в данные
+            // и оставался независимым от темы (цвет проставляется при загрузке).
+            let stripped = NSMutableAttributedString(attributedString: storage)
+            let range = NSRange(location: 0, length: stripped.length)
+            stripped.removeAttribute(.foregroundColor, range: range)
+            if let rtf = stripped.rtf(from: range, documentAttributes: [:]) {
                 parent.rtfData = rtf
             }
         }

@@ -689,6 +689,8 @@ struct ChapterEditorView: View {
     @AppStorage("editorPadding")  private var editorPadding: Double = 30
     /// Время последнего сохранённого снапшота для этой главы
     @State private var lastSnapshotDate: Date = .distantPast
+    /// Дебаунс-задача автосохранения (чтобы не писать в SwiftData/CloudKit на каждый символ)
+    @State private var saveTask: Task<Void, Never>? = nil
 
     enum PanelTab: String, CaseIterable {
         case characters = "Персонажи"
@@ -726,6 +728,9 @@ struct ChapterEditorView: View {
                         horizontalPadding: editorPadding,
                         topPadding: 16
                     )
+                    // Идентичность редактора привязана к главе: при переключении
+                    // создаётся свежий NSTextView, контент глав больше не "протекает".
+                    .id(chapter.id)
                 }
                 .background(Color("Editor"))
 
@@ -769,8 +774,13 @@ struct ChapterEditorView: View {
         }
         .onChange(of: chapter.text) { _, newText in
             chapter.updatedAt = Date()
-            try? modelContext.save()
-            saveSnapshotIfNeeded(text: newText)
+            saveTask?.cancel()
+            saveTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                guard !Task.isCancelled else { return }
+                try? modelContext.save()
+                saveSnapshotIfNeeded(text: newText)
+            }
         }
         .onAppear {
             // Загружаем дату последнего снапшота при открытии главы
@@ -822,6 +832,8 @@ struct FullscreenChapterEditor: View {
     @AppStorage("editorFocusPadding") private var focusPadding: Double = 40
     @State private var showControls = true
     @State private var hideTask: Task<Void, Never>? = nil
+    /// Дебаунс-задача автосохранения
+    @State private var saveTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -844,6 +856,7 @@ struct FullscreenChapterEditor: View {
                     horizontalPadding: focusPadding,
                     topPadding: 16
                 )
+                .id(chapter.id)
             }
             .background(Color("Editor"))
             .onHover { _ in resetHideTimer() }
@@ -888,8 +901,13 @@ struct FullscreenChapterEditor: View {
         }
         .onChange(of: chapter.text) { _, _ in
             chapter.updatedAt = Date()
-            try? modelContext.save()
             resetHideTimer()
+            saveTask?.cancel()
+            saveTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                guard !Task.isCancelled else { return }
+                try? modelContext.save()
+            }
         }
         .onContinuousHover { phase in
             if case .active = phase { resetHideTimer() }
